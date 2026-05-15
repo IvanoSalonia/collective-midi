@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conductor — Collective MIDI</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="conductor">
+  <header class="bar">
+    <div class="bar-left">
+      <strong>Conductor</strong>
+      <span class="muted" id="status">connecting…</span>
+    </div>
+    <div class="bar-right">
+      <label class="midi-select">
+        MIDI input
+        <select id="midi-input"><option value="">— none —</option></select>
+      </label>
+      <span class="muted" id="total">0 connected</span>
+    </div>
+  </header>
+
+  <div class="ch-meter" id="ch-meter" aria-label="MIDI channel activity">
+    <div class="ch" data-ch="0"><span>1</span></div>
+    <div class="ch" data-ch="1"><span>2</span></div>
+    <div class="ch" data-ch="2"><span>3</span></div>
+    <div class="ch" data-ch="3"><span>4</span></div>
+  </div>
+
+  <section id="groups" class="groups"></section>
+
+  <section class="log-wrap">
+    <h3>Live notes</h3>
+    <div id="log" class="log"></div>
+  </section>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/conductor.js"></script>
+</body>
+</html>

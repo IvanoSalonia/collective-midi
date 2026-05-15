@@ -1,0 +1,18 @@
+{
+  "name": "collective-midi",
+  "version": "0.1.0",
+  "description": "Live distributed-instrument web app: a performer's MIDI controller routes notes to audience phones in real time.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "socket.io": "^4.8.1"
+  },
+  "license": "MIT"
+}

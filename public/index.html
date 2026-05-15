@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Collective MIDI</title>
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="audience">
+  <!-- Tap-to-start overlay. iOS requires a user gesture to (a) unlock AudioContext
+       and (b) request DeviceOrientation permission. We fold both into one tap. -->
+  <div id="start-overlay">
+    <div class="start-inner">
+      <div class="start-title">Tap to join</div>
+      <div class="start-sub" id="start-sub">Sound + tilt</div>
+    </div>
+  </div>
+
+  <canvas id="stage"></canvas>
+
+  <!-- Module entry point -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="/js/audience.js"></script>
+</body>
+</html>
