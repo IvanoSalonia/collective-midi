@@ -132,8 +132,34 @@ async function startEverything() {
     window.addEventListener('devicemotion', onMotion);
   }
 
+  // Keep the screen awake during the performance. Requires HTTPS, which
+  // Railway provides. Supported on iOS 16.4+ and Chrome on Android.
+  // The OS releases the lock when the tab goes to background — we re-request
+  // it on visibilitychange below.
+  await requestWakeLock();
+
   requestAnimationFrame(render);
 }
+
+let wakeLock = null;
+
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (e) {
+    console.warn('wake lock failed:', e.message);
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  // Stack only exists after the tap-to-join, so this is a no-op until the
+  // user has actually engaged with the page.
+  if (document.visibilityState === 'visible' && !wakeLock && stack) {
+    requestWakeLock();
+  }
+});
 
 function waitForSettings() {
   return new Promise((resolve) => {
