@@ -156,17 +156,28 @@ async function startEverything() {
 
 // iPhone Safari can't be put into fullscreen via JS — the only way to hide
 // browser chrome there is for the user to "Add to Home Screen" and open
-// from the icon (which uses the standalone meta tags + manifest). Show a
-// small dismissible prompt only on iPhone Safari, only when not already
-// running standalone, and remember dismissal so we don't nag.
+// from the icon (which uses the standalone meta tags + manifest).
+//
+// Chrome on iOS is *also* WebKit (Apple mandates it) but it does NOT
+// honor the standalone meta tags — its "Add to Home Screen" creates an
+// icon that opens Chrome normally, with full chrome. No fullscreen path
+// exists for Chrome iOS, so we skip the prompt there entirely rather than
+// give misleading advice.
+//
+// Show the prompt only on Safari iPhone, when not already standalone, and
+// remember dismissal so we don't nag.
 function maybeShowAddToHomeScreenPrompt() {
-  const isIPhone = /iPhone|iPod/.test(navigator.userAgent);
+  const ua = navigator.userAgent;
+  const isIPhone = /iPhone|iPod/.test(ua);
+  // CriOS = Chrome iOS, FxiOS = Firefox iOS, EdgiOS = Edge iOS.
+  // None of these can give a true standalone experience.
+  const isThirdPartyIOSBrowser = /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
   const isStandalone =
     window.navigator.standalone === true ||
     window.matchMedia('(display-mode: standalone)').matches;
   let dismissed = false;
   try { dismissed = localStorage.getItem('a2hs-dismissed') === '1'; } catch {}
-  if (!isIPhone || isStandalone || dismissed) return;
+  if (!isIPhone || isThirdPartyIOSBrowser || isStandalone || dismissed) return;
 
   const prompt = document.getElementById('a2hs-prompt');
   if (!prompt) return;
