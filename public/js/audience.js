@@ -110,6 +110,17 @@ overlay.addEventListener('click', async () => {
 }, { once: true });
 
 async function startEverything() {
+  // Try to enter fullscreen. Works on Android Chrome, iPad, and desktop.
+  // iPhone Safari doesn't support requestFullscreen on arbitrary elements
+  // and will throw — caught and ignored. (For iPhone the path is "Add to
+  // Home Screen", which uses the manifest + apple-mobile-web-app-capable
+  // meta tag to open standalone.)
+  try {
+    const root = document.documentElement;
+    if (root.requestFullscreen) await root.requestFullscreen({ navigationUI: 'hide' });
+    else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
+  } catch { /* iPhone Safari, user denied, etc. */ }
+
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') await audioCtx.resume();
   const settings = pendingSettings || await waitForSettings();

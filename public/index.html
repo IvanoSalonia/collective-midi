@@ -5,6 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <title>Collective MIDI</title>
   <link rel="stylesheet" href="/css/styles.css" />
+
+  <!-- Open standalone (no browser chrome) when added to home screen on iOS. -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Collective MIDI" />
+  <!-- Same for Android Chrome / generic PWA. -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#000000" />
+  <link rel="manifest" href="/manifest.webmanifest" />
 </head>
 <body class="audience">
   <!-- Tap-to-start overlay. iOS requires a user gesture to (a) unlock AudioContext

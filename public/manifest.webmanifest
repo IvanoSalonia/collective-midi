@@ -1,0 +1,10 @@
+{
+  "name": "Collective MIDI",
+  "short_name": "Collective",
+  "description": "Live distributed instrument — your phone is part of the performance.",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#000000"
+}
