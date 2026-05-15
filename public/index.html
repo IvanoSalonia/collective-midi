@@ -27,6 +27,19 @@
 
   <canvas id="stage"></canvas>
 
+  <!-- iPhone-only "Add to Home Screen" hint. Shown after the join tap if
+       Safari isn't in standalone mode and the user hasn't dismissed it before. -->
+  <div id="a2hs-prompt" class="a2hs-prompt hidden">
+    <div class="a2hs-text">
+      For full screen: tap
+      <svg class="a2hs-icon" width="14" height="18" viewBox="0 0 14 18" aria-hidden="true">
+        <path fill="currentColor" d="M7 0L4 3l.85.85L6.4 2.3V11h1.2V2.3l1.55 1.55L10 3 7 0zM1 7v10h12V7h-3v1.2h1.8v7.6H2.2V8.2H4V7H1z"/>
+      </svg>
+      then <strong>Add to Home Screen</strong>
+    </div>
+    <button class="a2hs-dismiss" aria-label="Dismiss">×</button>
+  </div>
+
   <!-- Module entry point -->
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="/js/audience.js"></script>

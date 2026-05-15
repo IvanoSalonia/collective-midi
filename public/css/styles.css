@@ -28,6 +28,52 @@ body.audience {
   display: block;
 }
 
+/* iPhone-only "Add to Home Screen" prompt — shown after the start tap when
+   Safari is not yet in standalone mode. Sits at the bottom; dismissible. */
+.a2hs-prompt {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.7rem 0.85rem calc(0.7rem + env(safe-area-inset-bottom, 0));
+  background: rgba(18, 18, 18, 0.94);
+  border-top: 1px solid #2a2a2a;
+  color: #ddd;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  z-index: 5;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.35s ease, opacity 0.35s ease;
+}
+.a2hs-prompt.hidden {
+  transform: translateY(120%);
+  opacity: 0;
+  pointer-events: none;
+}
+.a2hs-text {
+  flex: 1;
+  line-height: 1.35;
+}
+.a2hs-icon {
+  display: inline-block;
+  vertical-align: -3px;
+  margin: 0 0.15rem;
+  color: #58a6ff;
+}
+.a2hs-dismiss {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  flex-shrink: 0;
+}
+
 #start-overlay {
   position: fixed;
   inset: 0;

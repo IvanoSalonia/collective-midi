@@ -149,7 +149,32 @@ async function startEverything() {
   // it on visibilitychange below.
   await requestWakeLock();
 
+  maybeShowAddToHomeScreenPrompt();
+
   requestAnimationFrame(render);
+}
+
+// iPhone Safari can't be put into fullscreen via JS — the only way to hide
+// browser chrome there is for the user to "Add to Home Screen" and open
+// from the icon (which uses the standalone meta tags + manifest). Show a
+// small dismissible prompt only on iPhone Safari, only when not already
+// running standalone, and remember dismissal so we don't nag.
+function maybeShowAddToHomeScreenPrompt() {
+  const isIPhone = /iPhone|iPod/.test(navigator.userAgent);
+  const isStandalone =
+    window.navigator.standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+  let dismissed = false;
+  try { dismissed = localStorage.getItem('a2hs-dismissed') === '1'; } catch {}
+  if (!isIPhone || isStandalone || dismissed) return;
+
+  const prompt = document.getElementById('a2hs-prompt');
+  if (!prompt) return;
+  prompt.classList.remove('hidden');
+  prompt.querySelector('.a2hs-dismiss')?.addEventListener('click', () => {
+    prompt.classList.add('hidden');
+    try { localStorage.setItem('a2hs-dismissed', '1'); } catch {}
+  }, { once: true });
 }
 
 let wakeLock = null;
