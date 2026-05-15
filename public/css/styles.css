@@ -175,6 +175,133 @@ body.conductor {
   color: #fff;
 }
 
+/* --- Sound design admin panel --- */
+.rehearsal-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: #aaa;
+  user-select: none;
+  cursor: pointer;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  background: #111;
+}
+.rehearsal-toggle input { margin: 0; }
+.rehearsal-toggle:has(input:checked) {
+  background: #1f2c1f;
+  border-color: #3a6a3a;
+  color: #cdebcd;
+}
+
+.sd-panel {
+  display: grid;
+  grid-template-columns: 1fr 220px;
+  gap: 0.75rem;
+  padding: 0 1rem 1rem;
+}
+@media (max-width: 900px) {
+  .sd-panel { grid-template-columns: 1fr; }
+}
+
+.sd-channels {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.6rem;
+}
+@media (max-width: 900px) {
+  .sd-channels { grid-template-columns: repeat(2, 1fr); }
+}
+
+.sd-strip,
+.sd-fx {
+  background: #0c0c0c;
+  border: 1px solid #1f1f1f;
+  border-radius: 8px;
+  padding: 0.7rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.sd-strip-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+  border-bottom: 1px solid #1a1a1a;
+  padding-bottom: 0.4rem;
+}
+.sd-strip-num {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #fff;
+}
+.sd-strip-label {
+  font-size: 0.8rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.sd-fx-head {
+  font-size: 0.8rem;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-bottom: 1px solid #1a1a1a;
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.2rem;
+}
+
+.sd-row {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.78rem;
+  color: #aaa;
+}
+.sd-row select,
+.sd-row input[type="number"] {
+  background: #111;
+  color: #eee;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 0.2rem 0.35rem;
+  font-size: 0.8rem;
+  width: 100%;
+}
+.sd-row input[type="range"] {
+  width: 100%;
+  accent-color: #888;
+}
+
+.sd-drop {
+  border: 1px dashed #333;
+  border-radius: 6px;
+  padding: 0.6rem 0.5rem;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.sd-drop:hover { border-color: #555; }
+.sd-drop.drag {
+  background: #1a2a1a;
+  border-color: #4a8a4a;
+}
+.sd-drop-label {
+  font-size: 0.78rem;
+  color: #aaa;
+}
+.sd-drop-name {
+  font-size: 0.7rem;
+  margin-top: 0.2rem;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
 .log-wrap {
   padding: 0.5rem 1rem 1.5rem;
   flex: 1;

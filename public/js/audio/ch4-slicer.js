@@ -1,22 +1,23 @@
 // Channel 4 — sample slicer.
 //
-// Loads one long user-supplied sample, divides it into 36 equal slices
-// (one per note in the C3..B5 range). Each note triggers its slice from
-// start to end with a short envelope. Slice plays at native rate (no pitch
-// shift), so the texture of the source is preserved.
+// One long user-supplied sample, divided into 36 equal segments (one per
+// note in C3..B5). Each note plays its slice from start to end at native
+// pitch with short fades to avoid clicks. No synth params.
 
 const NOTE_MIN = 48;
 const NOTE_MAX = 83;
 const SLICE_COUNT = NOTE_MAX - NOTE_MIN + 1;
 
 export class Ch4Slicer {
-  constructor(ctx, destination) {
+  constructor(ctx, destination /*, settings */) {
     this.ctx = ctx;
     this.destination = destination;
     this.buffer = null;
     this.sliceDuration = 0;
-    this.voices = new Map(); // note -> { source, amp, stopped }
+    this.voices = new Map();
   }
+
+  updateSettings(_s) { /* no synth params */ }
 
   async load(url) {
     const res = await fetch(url);
@@ -40,7 +41,6 @@ export class Ch4Slicer {
     source.buffer = this.buffer;
 
     const amp = this.ctx.createGain();
-    // Quick fade-in/out around the slice to avoid clicks at slice boundaries.
     const fade = Math.min(0.02, duration * 0.1);
     amp.gain.setValueAtTime(0, t);
     amp.gain.linearRampToValueAtTime(0.6 * v, t + fade);
@@ -52,7 +52,6 @@ export class Ch4Slicer {
 
     const existing = this.voices.get(note);
     if (existing) this._release(existing, t);
-
     this.voices.set(note, { source, amp, stopped: false });
 
     source.onended = () => {
@@ -65,7 +64,6 @@ export class Ch4Slicer {
   noteOff(note) {
     const voice = this.voices.get(note);
     if (!voice || voice.stopped) return;
-    // Slices are short; just fade fast.
     const t = this.ctx.currentTime;
     voice.stopped = true;
     voice.amp.gain.cancelScheduledValues(t);

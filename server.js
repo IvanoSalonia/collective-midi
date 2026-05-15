@@ -1,42 +1,88 @@
 // Collective MIDI Performance — server
 //
 // Routes MIDI note events from one "conductor" (the performer) to many
-// "audience" clients (phones). Each audience client is assigned to one of 8
-// groups on join. Each (channel, note) pair maps to exactly one group; only
-// audience clients in that group receive the event.
+// "audience" clients (phones), and keeps a single source of truth for
+// sound-design settings (synth params, FX sends, BPM, sample URLs).
+//
+// Settings flow:
+//   - server holds DEFAULT_SETTINGS (mutable in memory, not persisted).
+//   - on connect, both audience and conductor receive the full settings.
+//   - conductor sends partial 'settings-update' payloads (deep-merged here),
+//     and the merged result is broadcast to everyone.
+//   - sample uploads go through POST /upload/:channel (ch2 or ch4 only),
+//     which writes to samples/uploaded/ and updates settings.samples.
 
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
 const { buildNoteMap, GROUP_COUNT, GROUP_COLORS } = require('./public/js/shared/note-mapping');
+const { DEFAULT_SETTINGS } = require('./default-settings');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  // Allow connections from anywhere — this is a public performance app.
-  cors: { origin: '*' }
+  cors: { origin: '*' },
+  // Bump the upload limit so audio file payloads don't get rejected if they
+  // ever come through socket.io (currently they go through HTTP, but harmless).
+  maxHttpBufferSize: 50 * 1024 * 1024
 });
 
 const PORT = process.env.PORT || 3000;
+const UPLOAD_DIR = path.join(__dirname, 'samples', 'uploaded');
+const UPLOAD_LIMIT = 25 * 1024 * 1024; // 25 MB per file
+const ALLOWED_UPLOAD_CHANNELS = new Set(['ch2', 'ch4']);
 
-// Serve static client files.
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+// Static + sample serving.
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/samples', express.static(path.join(__dirname, 'samples')));
 
-// Routes — explicit so /conductor returns the conductor page even without ".html".
 app.get('/', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 app.get('/conductor', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'conductor.html')));
 
-// (channel 0..3, note 48..83) -> group 0..7. Same map for the whole server lifetime.
-const noteMap = buildNoteMap();
+// --- Sample upload (raw body) ---------------------------------------------
+// Conductor POSTs the file bytes with X-Filename header (so we can keep the
+// extension). We accept ch2 or ch4 only — the other two channels are
+// fully synthesized.
+app.post('/upload/:channel',
+  express.raw({ type: '*/*', limit: UPLOAD_LIMIT }),
+  (req, res) => {
+    const channel = req.params.channel;
+    if (!ALLOWED_UPLOAD_CHANNELS.has(channel)) {
+      return res.status(400).json({ error: 'channel must be ch2 or ch4' });
+    }
+    if (!req.body || !req.body.length) {
+      return res.status(400).json({ error: 'empty body' });
+    }
+    const filename = req.headers['x-filename'] || 'upload.bin';
+    const safeExt = (path.extname(filename).match(/^\.[A-Za-z0-9]{1,8}$/) || ['.bin'])[0];
+    // Write deterministic name per channel; old upload is overwritten so we
+    // don't accumulate junk on disk.
+    const outPath = path.join(UPLOAD_DIR, `${channel}${safeExt}`);
+    fs.writeFile(outPath, req.body, (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      // URL the audience clients will fetch from. Add a cache-buster so every
+      // upload forces a fresh decode even if the path didn't change.
+      const url = `/samples/uploaded/${channel}${safeExt}?v=${Date.now()}`;
+      currentSettings.samples[channel] = url;
+      io.emit('settings', currentSettings);
+      res.json({ ok: true, url });
+    });
+  });
 
-// Track audience members. Map<socketId, { group: number }>
-const audience = new Map();
-// Round-robin counter so groups fill evenly as people join.
+// --- Note routing ---------------------------------------------------------
+
+const noteMap = buildNoteMap();
+const audience = new Map(); // socketId -> { group }
 let nextGroupCursor = 0;
-// Conductor socket id (only one conductor at a time).
 let conductorId = null;
+
+// Settings live here. Modified by 'settings-update' from the conductor and
+// by sample uploads. Reset to defaults if the server restarts.
+const currentSettings = JSON.parse(JSON.stringify(DEFAULT_SETTINGS));
 
 function audienceCountsByGroup() {
   const counts = new Array(GROUP_COUNT).fill(0);
@@ -52,11 +98,39 @@ function broadcastRoster() {
   });
 }
 
+// Deep-merge a partial settings patch into the current settings. Arrays are
+// merged element-wise so the conductor can patch a single channel by index.
+// Null/undefined items are treated as "leave existing value alone" — important
+// because JSON.stringify converts `undefined` array slots to `null` in transit,
+// and we don't want a single-channel patch to wipe out the others.
+function mergeSettings(target, patch) {
+  for (const k of Object.keys(patch)) {
+    const pv = patch[k];
+    if (pv === null || pv === undefined) continue;
+    if (Array.isArray(pv)) {
+      if (!Array.isArray(target[k])) target[k] = [];
+      pv.forEach((item, i) => {
+        if (item === null || item === undefined) return;
+        if (typeof item === 'object' && !Array.isArray(item)) {
+          target[k][i] = target[k][i] || {};
+          mergeSettings(target[k][i], item);
+        } else {
+          target[k][i] = item;
+        }
+      });
+    } else if (typeof pv === 'object') {
+      target[k] = target[k] || {};
+      mergeSettings(target[k], pv);
+    } else {
+      target[k] = pv;
+    }
+  }
+  return target;
+}
+
 io.on('connection', (socket) => {
-  // The first message a client sends declares its role.
   socket.on('hello', ({ role }) => {
     if (role === 'conductor') {
-      // If a conductor was already connected, kick the previous one — last writer wins.
       if (conductorId && conductorId !== socket.id) {
         io.to(conductorId).emit('replaced');
       }
@@ -64,12 +138,13 @@ io.on('connection', (socket) => {
       socket.emit('conductor-ready', {
         groupCount: GROUP_COUNT,
         colors: GROUP_COLORS,
-        roster: { total: audience.size, perGroup: audienceCountsByGroup() }
+        roster: { total: audience.size, perGroup: audienceCountsByGroup() },
+        settings: currentSettings
       });
       return;
     }
 
-    // Default: audience member.
+    // Audience.
     const group = nextGroupCursor % GROUP_COUNT;
     nextGroupCursor++;
     audience.set(socket.id, { group });
@@ -77,19 +152,27 @@ io.on('connection', (socket) => {
     socket.emit('assigned', {
       group,
       color: GROUP_COLORS[group],
-      groupCount: GROUP_COUNT
+      groupCount: GROUP_COUNT,
+      settings: currentSettings
     });
     broadcastRoster();
   });
 
-  // Conductor sends note-on / note-off events. Only the registered conductor is honored.
+  // Conductor pushes a (possibly partial) settings change. Server merges,
+  // then broadcasts the full new settings to everyone.
+  socket.on('settings-update', (patch) => {
+    if (socket.id !== conductorId) return;
+    if (!patch || typeof patch !== 'object') return;
+    mergeSettings(currentSettings, patch);
+    io.emit('settings', currentSettings);
+  });
+
   socket.on('note-on', ({ channel, note, velocity }) => {
     if (socket.id !== conductorId) return;
     if (!Number.isInteger(channel) || !Number.isInteger(note)) return;
     const group = noteMap[channel]?.[note];
-    if (group === undefined) return; // out-of-range note, ignore
+    if (group === undefined) return;
     io.to(`group:${group}`).emit('note-on', { channel, note, velocity });
-    // Echo back to the conductor so its visualization can light the right group.
     socket.emit('note-echo', { channel, note, velocity, group, kind: 'on' });
   });
 

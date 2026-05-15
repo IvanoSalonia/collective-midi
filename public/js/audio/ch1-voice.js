@@ -1,44 +1,45 @@
-// Channel 1 — synthesized "modular-style" voice.
+// Channel 1 — synthesized voice, parametrized.
 //
-// Two detuned sawtooth oscillators → resonant low-pass with envelope sweep
-// → amp envelope → destination. Polyphonic: every noteOn allocates its own
-// voice, every noteOff schedules release.
+// Two detuned oscillators (osc type configurable) → static low-pass at the
+// user-set cutoff → ADR amp envelope → destination. Polyphonic.
 
 const NOTE_TO_HZ = (n) => 440 * Math.pow(2, (n - 69) / 12);
+const SUSTAIN_LEVEL = 0.6; // implicit sustain — three knobs are A/D/R only
 
 export class Ch1Voice {
-  constructor(ctx, destination) {
+  constructor(ctx, destination, settings) {
     this.ctx = ctx;
     this.destination = destination;
-    this.voices = new Map(); // note -> { osc1, osc2, filter, amp, stopped }
+    this.s = settings;       // mutable; updateSettings replaces
+    this.voices = new Map(); // note -> voice
   }
+
+  updateSettings(s) { this.s = s; }
 
   noteOn(note, velocity) {
     const t = this.ctx.currentTime;
     const freq = NOTE_TO_HZ(note);
     const v = Math.min(1, velocity / 127);
+    const peak = 0.18 * v;
 
     const osc1 = this.ctx.createOscillator();
     const osc2 = this.ctx.createOscillator();
-    osc1.type = 'sawtooth';
-    osc2.type = 'sawtooth';
+    osc1.type = this.s.osc;
+    osc2.type = this.s.osc;
     osc1.frequency.value = freq;
     osc2.frequency.value = freq * 1.005; // ~8 cents detune
 
     const filter = this.ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.Q.value = 8;
-    // Filter envelope: snap open, decay back down.
-    const fStart = Math.min(8000, freq * 12);
-    const fEnd = Math.max(freq * 1.5, 200);
-    filter.frequency.setValueAtTime(fEnd, t);
-    filter.frequency.linearRampToValueAtTime(fStart, t + 0.01);
-    filter.frequency.exponentialRampToValueAtTime(fEnd, t + 0.6);
+    filter.frequency.value = this.s.cutoff;
+    filter.Q.value = 2;
 
     const amp = this.ctx.createGain();
+    const a = Math.max(0.001, this.s.attack);
+    const d = Math.max(0.001, this.s.decay);
     amp.gain.setValueAtTime(0, t);
-    amp.gain.linearRampToValueAtTime(0.18 * v, t + 0.005); // fast attack
-    amp.gain.linearRampToValueAtTime(0.12 * v, t + 0.15);  // decay to sustain
+    amp.gain.linearRampToValueAtTime(peak, t + a);
+    amp.gain.linearRampToValueAtTime(peak * SUSTAIN_LEVEL, t + a + d);
 
     osc1.connect(filter);
     osc2.connect(filter);
@@ -47,10 +48,8 @@ export class Ch1Voice {
     osc1.start(t);
     osc2.start(t);
 
-    // If the same note is retriggered, release the old voice first.
     const existing = this.voices.get(note);
     if (existing) this._release(existing, t);
-
     this.voices.set(note, { osc1, osc2, filter, amp, stopped: false });
   }
 
@@ -63,11 +62,11 @@ export class Ch1Voice {
 
   _release(voice, t) {
     voice.stopped = true;
-    const release = 0.35;
+    const r = Math.max(0.005, this.s.release);
     voice.amp.gain.cancelScheduledValues(t);
     voice.amp.gain.setValueAtTime(voice.amp.gain.value, t);
-    voice.amp.gain.linearRampToValueAtTime(0, t + release);
-    voice.osc1.stop(t + release + 0.05);
-    voice.osc2.stop(t + release + 0.05);
+    voice.amp.gain.linearRampToValueAtTime(0, t + r);
+    voice.osc1.stop(t + r + 0.05);
+    voice.osc2.stop(t + r + 0.05);
   }
 }

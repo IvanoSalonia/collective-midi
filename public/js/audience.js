@@ -1,69 +1,107 @@
 // Audience client — runs on each phone.
 //
-// Responsibilities:
-//   1. Connect to the server, declare ourselves as audience, receive group + color.
-//   2. On first tap: unlock AudioContext, request iOS DeviceOrientation permission.
-//   3. On note-on/off events from the server: trigger the right audio engine.
-//   4. Continuously map device tilt → master low-pass filter (cutoff + Q).
-//   5. Render the visual: one centered dot, breathing when idle, pulsing on note.
+// Visual: a single dot floating on a black canvas. The dot is a small physics
+// object — accelerometer impulses push it, then it drifts and bounces off the
+// edges with heavy damping. Its position controls the master low-pass filter
+// (X = cutoff, Y = resonance), so each phone shapes its sound by being moved.
+// Brightness tracks note state: spikes on note-on, holds while a note is held,
+// fades on note-off.
 
-import { Ch1Voice } from '/js/audio/ch1-voice.js';
-import { Ch2Sample } from '/js/audio/ch2-sample.js';
-import { Ch3Noise } from '/js/audio/ch3-noise.js';
-import { Ch4Slicer } from '/js/audio/ch4-slicer.js';
+import { createAudioStack } from '/js/audio/audio-stack.js';
 
 const socket = io();
 
-// --- State -----------------------------------------------------------------
+// --- Settings / connection state -----------------------------------------
 
 let audioCtx = null;
-let masterFilter = null;   // shared low-pass driven by device tilt
-let masterGain = null;
-let engines = null;        // { 0: Ch1Voice, 1: Ch2Sample, 2: Ch3Noise, 3: Ch4Slicer }
+let stack = null;
+let pendingSettings = null;
+let appliedSamples = { ch2: null, ch4: null };
 let myGroup = null;
 let myColor = '#ffffff';
-let activeNotes = 0;       // count of currently-held notes (for visual pulse)
-let lastTriggerTime = 0;   // ms timestamp of most recent note-on
 
-// Tilt state (raw beta/gamma in degrees). Smoothed for filter to avoid clicks.
-let beta = 0;
-let gamma = 0;
-let smoothedCutoff = 1000;
+// Note state — how many notes are currently held for this phone's group.
+let activeNotes = 0;
+
+// --- Physics dot ---------------------------------------------------------
+// Impulse accumulator: motion events between frames sum into here, then the
+// render loop applies them as one impulse and clears. Avoids both
+// per-frame integration drift and event-rate dependence.
+const pendingImpulse = { x: 0, y: 0 };
+
+const dot = { x: 0, y: 0, vx: 0, vy: 0, initialized: false };
+
+// Tunables. Calibrated against typical iPhone DeviceMotion readings
+// (~30Hz event rate; flick ≈ 5-30 m/s², still phone ≈ 0.05-0.15 m/s²).
+const PHYSICS = {
+  noiseFloor: 0.25,   // m/s² — readings below this are treated as zero
+  impulseScale: 0.45, // px-of-velocity per (m/s² · dpr)
+  damping: 0.985,     // velocity multiplier per frame (~60fps)
+  bounce: 0.6,        // velocity retained on edge bounce
+  margin: 30          // px from each edge (matches original spec)
+};
+
+const FILTER = {
+  cutoffMin: 200, cutoffMax: 8000,  // Hz, log-mapped
+  qMin: 0.5, qMax: 10,              // resonance, linear
+  smoothing: 0.05                    // smoothing factor per frame for filter param
+};
+
+const BRIGHTNESS = {
+  base: 0.35,           // alpha when no notes have ever played
+  attack: 0.35,         // smoothing when activeNotes > 0
+  release: 0.06         // smoothing when activeNotes == 0 (slow fade)
+};
+
+let smoothedCutoff = 1500;
 let smoothedQ = 1;
+let visualBrightness = 0;
 
-// --- Socket wiring ---------------------------------------------------------
+// --- Socket wiring -------------------------------------------------------
 
-socket.on('connect', () => {
-  socket.emit('hello', { role: 'audience' });
-});
+socket.on('connect', () => socket.emit('hello', { role: 'audience' }));
 
-socket.on('assigned', ({ group, color }) => {
+socket.on('assigned', ({ group, color, settings }) => {
   myGroup = group;
   myColor = color;
   document.documentElement.style.setProperty('--group-color', color);
-  // Update the start overlay to hint which group they're in.
+  pendingSettings = settings;
   const sub = document.getElementById('start-sub');
   if (sub) sub.textContent = `Group ${group + 1}`;
 });
 
+socket.on('settings', (settings) => {
+  if (!stack) { pendingSettings = settings; return; }
+  applyIncomingSettings(settings);
+});
+
 socket.on('note-on', ({ channel, note, velocity }) => {
-  if (!engines) return;
-  const engine = engines[channel];
-  if (!engine) return;
-  engine.noteOn(note, velocity ?? 100);
+  if (!stack) return;
+  stack.noteOn(channel, note, velocity ?? 100);
   activeNotes++;
-  lastTriggerTime = performance.now();
 });
 
 socket.on('note-off', ({ channel, note }) => {
-  if (!engines) return;
-  const engine = engines[channel];
-  if (!engine) return;
-  engine.noteOff(note);
+  if (!stack) return;
+  stack.noteOff(channel, note);
   activeNotes = Math.max(0, activeNotes - 1);
 });
 
-// --- Start tap (unlock audio + ask for tilt permission) --------------------
+function applyIncomingSettings(settings) {
+  stack.applySettings(settings);
+  if (settings.samples.ch2 !== appliedSamples.ch2) {
+    stack.reloadSample(1, settings.samples.ch2).catch((e) =>
+      console.warn('ch2 reload failed:', e.message));
+    appliedSamples.ch2 = settings.samples.ch2;
+  }
+  if (settings.samples.ch4 !== appliedSamples.ch4) {
+    stack.reloadSample(3, settings.samples.ch4).catch((e) =>
+      console.warn('ch4 reload failed:', e.message));
+    appliedSamples.ch4 = settings.samples.ch4;
+  }
+}
+
+// --- Start tap (unlock audio + ask for motion permission) ----------------
 
 const overlay = document.getElementById('start-overlay');
 overlay.addEventListener('click', async () => {
@@ -72,65 +110,53 @@ overlay.addEventListener('click', async () => {
 }, { once: true });
 
 async function startEverything() {
-  // 1. Audio context
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+  const settings = pendingSettings || await waitForSettings();
 
-  masterFilter = audioCtx.createBiquadFilter();
-  masterFilter.type = 'lowpass';
-  masterFilter.frequency.value = 1500;
-  masterFilter.Q.value = 1;
+  stack = createAudioStack(audioCtx, settings);
+  appliedSamples.ch2 = settings.samples.ch2;
+  appliedSamples.ch4 = settings.samples.ch4;
 
-  masterGain = audioCtx.createGain();
-  masterGain.gain.value = 0.7;
-
-  masterFilter.connect(masterGain).connect(audioCtx.destination);
-
-  // 2. Engines — each gets the filter as its destination
-  engines = {
-    0: new Ch1Voice(audioCtx, masterFilter),
-    1: new Ch2Sample(audioCtx, masterFilter),
-    2: new Ch3Noise(audioCtx, masterFilter),
-    3: new Ch4Slicer(audioCtx, masterFilter)
-  };
-
-  // Sample-based engines load asynchronously; failures (missing files) just
-  // mute that channel rather than crashing the whole experience.
-  // Note: filenames refer to source files in /samples; the channel they feed
-  // is decided here, not by the filename. ch4-instrument.mp3 is the short hit
-  // used as ch2's pitched instrument; ch2-instrument.mp3 is the longer source
-  // sliced across ch4's note range.
-  engines[1].load('/samples/ch4-instrument.mp3').catch((e) =>
-    console.warn('ch2 sample failed to load:', e.message));
-  engines[3].load('/samples/ch2-instrument.mp3').catch((e) =>
-    console.warn('ch4 sample failed to load:', e.message));
-
-  // 3. Device orientation — iOS gates this behind a permission prompt
-  if (typeof DeviceOrientationEvent !== 'undefined' &&
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
+  // iOS 13+ requires explicit permission for DeviceMotion (and gates the
+  // sensor entirely without it). Non-iOS browsers just attach.
+  if (typeof DeviceMotionEvent !== 'undefined' &&
+      typeof DeviceMotionEvent.requestPermission === 'function') {
     try {
-      const result = await DeviceOrientationEvent.requestPermission();
-      if (result === 'granted') {
-        window.addEventListener('deviceorientation', onTilt);
-      }
+      const result = await DeviceMotionEvent.requestPermission();
+      if (result === 'granted') window.addEventListener('devicemotion', onMotion);
     } catch (e) {
-      console.warn('orientation permission denied:', e);
+      console.warn('motion permission denied:', e);
     }
   } else {
-    window.addEventListener('deviceorientation', onTilt);
+    window.addEventListener('devicemotion', onMotion);
   }
 
-  // 4. Start render loop
   requestAnimationFrame(render);
 }
 
-function onTilt(e) {
-  // beta: front-back tilt, -180..180 (positive = top tilted away from user)
-  // gamma: left-right tilt, -90..90 (positive = right edge down)
-  if (e.beta !== null) beta = e.beta;
-  if (e.gamma !== null) gamma = e.gamma;
+function waitForSettings() {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (pendingSettings) resolve(pendingSettings);
+      else setTimeout(check, 50);
+    };
+    check();
+  });
 }
 
-// --- Render loop -----------------------------------------------------------
+// Accumulate motion impulses between frames. `acceleration` excludes gravity,
+// so a still phone reads ~0 (modulo small sensor noise filtered below).
+function onMotion(e) {
+  const a = e.acceleration;
+  if (!a) return;
+  const ax = (a.x != null && Math.abs(a.x) > PHYSICS.noiseFloor) ? a.x : 0;
+  const ay = (a.y != null && Math.abs(a.y) > PHYSICS.noiseFloor) ? a.y : 0;
+  pendingImpulse.x += ax;
+  pendingImpulse.y += ay;
+}
+
+// --- Render loop ---------------------------------------------------------
 
 const canvas = document.getElementById('stage');
 const ctx = canvas.getContext('2d');
@@ -146,66 +172,83 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-function render(now) {
-  // Update master filter from tilt. Map beta (-90..90 useful range) → 200Hz..8000Hz log,
-  // gamma (-90..90) → Q 0.5..20.
-  const betaClamped = Math.max(-90, Math.min(90, beta));
-  const gammaClamped = Math.max(-90, Math.min(90, gamma));
-  const betaNorm = (betaClamped + 90) / 180; // 0..1
-  const gammaNorm = Math.abs(gammaClamped) / 90; // 0..1 (we use absolute tilt for resonance)
-  const targetCutoff = 200 * Math.pow(40, betaNorm); // 200..8000 Hz log
-  const targetQ = 0.5 + gammaNorm * 19.5;            // 0.5..20
+function render() {
+  const W = canvas.width;
+  const H = canvas.height;
+  const margin = PHYSICS.margin * dpr;
 
-  // Smooth toward targets so changes don't click.
-  smoothedCutoff += (targetCutoff - smoothedCutoff) * 0.08;
-  smoothedQ += (targetQ - smoothedQ) * 0.08;
-
-  if (masterFilter) {
-    masterFilter.frequency.setTargetAtTime(smoothedCutoff, audioCtx.currentTime, 0.02);
-    masterFilter.Q.setTargetAtTime(smoothedQ, audioCtx.currentTime, 0.02);
+  if (!dot.initialized) {
+    dot.x = W / 2;
+    dot.y = H / 2;
+    dot.initialized = true;
   }
 
-  // Visual: black background, single centered dot.
+  // 1. Apply pending impulse from motion events. Y is flipped because canvas
+  //    Y grows downward but phone "up" is positive accel.y.
+  dot.vx += pendingImpulse.x * PHYSICS.impulseScale * dpr;
+  dot.vy += -pendingImpulse.y * PHYSICS.impulseScale * dpr;
+  pendingImpulse.x = 0;
+  pendingImpulse.y = 0;
+
+  // 2. Damping (high viscosity).
+  dot.vx *= PHYSICS.damping;
+  dot.vy *= PHYSICS.damping;
+
+  // 3. Integrate position.
+  dot.x += dot.vx;
+  dot.y += dot.vy;
+
+  // 4. Bounce off edges.
+  if (dot.x < margin)        { dot.x = margin;        dot.vx = -dot.vx * PHYSICS.bounce; }
+  if (dot.x > W - margin)    { dot.x = W - margin;    dot.vx = -dot.vx * PHYSICS.bounce; }
+  if (dot.y < margin)        { dot.y = margin;        dot.vy = -dot.vy * PHYSICS.bounce; }
+  if (dot.y > H - margin)    { dot.y = H - margin;    dot.vy = -dot.vy * PHYSICS.bounce; }
+
+  // 5. Map dot position → filter params (slow / smoothed).
+  const usableW = Math.max(1, W - 2 * margin);
+  const usableH = Math.max(1, H - 2 * margin);
+  const xNorm = (dot.x - margin) / usableW; // 0..1
+  const yNorm = (dot.y - margin) / usableH; // 0..1
+  const targetCutoff = FILTER.cutoffMin * Math.pow(FILTER.cutoffMax / FILTER.cutoffMin, xNorm);
+  const targetQ = FILTER.qMin + (1 - yNorm) * (FILTER.qMax - FILTER.qMin); // top of screen = high Q
+  smoothedCutoff += (targetCutoff - smoothedCutoff) * FILTER.smoothing;
+  smoothedQ += (targetQ - smoothedQ) * FILTER.smoothing;
+  if (stack) {
+    stack.masterFilter.frequency.setTargetAtTime(smoothedCutoff, audioCtx.currentTime, 0.05);
+    stack.masterFilter.Q.setTargetAtTime(smoothedQ, audioCtx.currentTime, 0.05);
+  }
+
+  // 6. Brightness envelope — fast attack while notes are held, slow release.
+  const target = activeNotes > 0 ? 1 : 0;
+  const k = activeNotes > 0 ? BRIGHTNESS.attack : BRIGHTNESS.release;
+  visualBrightness += (target - visualBrightness) * k;
+
+  // 7. Draw.
   ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, W, H);
 
-  const margin = 30 * dpr;
-  const cx = canvas.width / 2;
-  const cy = canvas.height / 2;
-  const maxRadius = Math.min(canvas.width, canvas.height) / 2 - margin;
+  const radius = Math.min(W, H) * 0.1;
+  const alpha = BRIGHTNESS.base + visualBrightness * (1 - BRIGHTNESS.base);
 
-  // Idle breathing: slow sine in [0.55, 0.7] of maxRadius.
-  const breath = 0.625 + 0.075 * Math.sin(now * 0.0015);
-  // Pulse on recent note-on: short attack-decay envelope.
-  const since = now - lastTriggerTime;
-  const pulse = activeNotes > 0 || since < 600
-    ? Math.exp(-since / 400) * 0.35
-    : 0;
-  const radius = maxRadius * Math.min(1, breath + pulse);
-
-  // Brightness also reacts: brighter when active.
-  const baseAlpha = 0.55;
-  const activeAlpha = Math.min(1, baseAlpha + pulse * 1.5);
-  ctx.fillStyle = withAlpha(myColor, activeAlpha);
-  ctx.beginPath();
-  ctx.arc(cx, cy, radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Subtle outer glow when active.
-  if (pulse > 0.05) {
-    const grad = ctx.createRadialGradient(cx, cy, radius, cx, cy, radius * 1.6);
-    grad.addColorStop(0, withAlpha(myColor, pulse * 0.4));
-    grad.addColorStop(1, withAlpha(myColor, 0));
-    ctx.fillStyle = grad;
+  // Glow underneath, brightest when active.
+  if (visualBrightness > 0.05) {
+    const glow = ctx.createRadialGradient(dot.x, dot.y, radius, dot.x, dot.y, radius * 2.2);
+    glow.addColorStop(0, withAlpha(myColor, visualBrightness * 0.45));
+    glow.addColorStop(1, withAlpha(myColor, 0));
+    ctx.fillStyle = glow;
     ctx.beginPath();
-    ctx.arc(cx, cy, radius * 1.6, 0, Math.PI * 2);
+    ctx.arc(dot.x, dot.y, radius * 2.2, 0, Math.PI * 2);
     ctx.fill();
   }
+
+  ctx.fillStyle = withAlpha(myColor, alpha);
+  ctx.beginPath();
+  ctx.arc(dot.x, dot.y, radius, 0, Math.PI * 2);
+  ctx.fill();
 
   requestAnimationFrame(render);
 }
 
-// Convert "#RRGGBB" to "rgba(r,g,b,a)".
 function withAlpha(hex, a) {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);

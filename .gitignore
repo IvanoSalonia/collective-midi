@@ -7,3 +7,5 @@ Thumbs.db
 .idea/
 .vscode/
 *.tmp.*
+audience-qr.png
+samples/uploaded/

@@ -1,18 +1,20 @@
-// Channel 2 — sampled instrument with low attack.
+// Channel 2 — pitched sample.
 //
-// Loads one user-supplied sample (C4 reference). Each note plays the sample
-// with playbackRate set so the perceived pitch matches the requested note.
-// Has its own short attack envelope on top so retriggers don't click.
+// One user-supplied sample (uploaded via admin), C4 reference. Each note
+// plays the sample at the appropriate playbackRate. No synth params — the
+// only controls are FX sends (handled at the channel-strip layer).
 
 const REFERENCE_NOTE = 60; // C4
 
 export class Ch2Sample {
-  constructor(ctx, destination) {
+  constructor(ctx, destination /*, settings */) {
     this.ctx = ctx;
     this.destination = destination;
     this.buffer = null;
-    this.voices = new Map(); // note -> { source, amp, stopped }
+    this.voices = new Map(); // note -> voice
   }
+
+  updateSettings(_s) { /* no synth params for this channel */ }
 
   async load(url) {
     const res = await fetch(url);
@@ -32,7 +34,7 @@ export class Ch2Sample {
 
     const amp = this.ctx.createGain();
     amp.gain.setValueAtTime(0, t);
-    amp.gain.linearRampToValueAtTime(0.55 * v, t + 0.02); // soft attack
+    amp.gain.linearRampToValueAtTime(0.55 * v, t + 0.02);
     amp.gain.setValueAtTime(0.55 * v, t + 0.02);
 
     source.connect(amp).connect(this.destination);
@@ -40,10 +42,8 @@ export class Ch2Sample {
 
     const existing = this.voices.get(note);
     if (existing) this._release(existing, t);
-
     this.voices.set(note, { source, amp, stopped: false });
 
-    // Auto-cleanup when sample naturally ends.
     source.onended = () => {
       try { source.disconnect(); amp.disconnect(); } catch {}
       const cur = this.voices.get(note);

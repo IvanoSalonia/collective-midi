@@ -17,6 +17,10 @@
         MIDI input
         <select id="midi-input"><option value="">— none —</option></select>
       </label>
+      <label class="rehearsal-toggle" title="Play all 8 groups locally on this laptop, no phones needed">
+        <input type="checkbox" id="rehearsal-toggle" />
+        Rehearsal
+      </label>
       <span class="muted" id="total">0 connected</span>
     </div>
   </header>
@@ -29,6 +33,102 @@
   </div>
 
   <section id="groups" class="groups"></section>
+
+  <!-- Sound design admin panel. Channel strips on the left, FX bus + BPM on the right. -->
+  <section class="sd-panel" id="sd-panel">
+    <div class="sd-channels">
+      <!-- Ch1 — synth voice -->
+      <div class="sd-strip" data-ch="0">
+        <div class="sd-strip-head">
+          <span class="sd-strip-num">1</span>
+          <span class="sd-strip-label">Synth voice</span>
+        </div>
+        <label class="sd-row">
+          Osc
+          <select data-bind="osc">
+            <option value="sine">sine</option>
+            <option value="sawtooth">saw</option>
+            <option value="square">square</option>
+          </select>
+        </label>
+        <label class="sd-row">Cutoff <input type="range" data-bind="cutoff" min="80" max="8000" step="1" /></label>
+        <label class="sd-row">Attack <input type="range" data-bind="attack" min="0.001" max="2" step="0.001" /></label>
+        <label class="sd-row">Decay  <input type="range" data-bind="decay"  min="0.01"  max="3" step="0.01" /></label>
+        <label class="sd-row">Release <input type="range" data-bind="release" min="0.01" max="3" step="0.01" /></label>
+        <label class="sd-row">Reverb send <input type="range" data-bind="reverbSend" min="0" max="1" step="0.01" /></label>
+        <label class="sd-row">Delay send  <input type="range" data-bind="delaySend"  min="0" max="1" step="0.01" /></label>
+      </div>
+
+      <!-- Ch2 — pitched sample -->
+      <div class="sd-strip" data-ch="1">
+        <div class="sd-strip-head">
+          <span class="sd-strip-num">2</span>
+          <span class="sd-strip-label">Pitched sample</span>
+        </div>
+        <div class="sd-drop" data-channel="ch2">
+          <div class="sd-drop-label">Drop sample</div>
+          <div class="sd-drop-name muted" data-bind="filename">—</div>
+        </div>
+        <label class="sd-row">Reverb send <input type="range" data-bind="reverbSend" min="0" max="1" step="0.01" /></label>
+        <label class="sd-row">Delay send  <input type="range" data-bind="delaySend"  min="0" max="1" step="0.01" /></label>
+      </div>
+
+      <!-- Ch3 — noise/texture -->
+      <div class="sd-strip" data-ch="2">
+        <div class="sd-strip-head">
+          <span class="sd-strip-num">3</span>
+          <span class="sd-strip-label">Noise / texture</span>
+        </div>
+        <label class="sd-row">
+          Noise
+          <select data-bind="noise">
+            <option value="white">white</option>
+            <option value="pink">pink</option>
+            <option value="brown">brown</option>
+          </select>
+        </label>
+        <label class="sd-row">Cutoff <input type="range" data-bind="cutoff" min="80" max="8000" step="1" /></label>
+        <label class="sd-row">Attack <input type="range" data-bind="attack" min="0.001" max="2" step="0.001" /></label>
+        <label class="sd-row">Decay  <input type="range" data-bind="decay"  min="0.01"  max="3" step="0.01" /></label>
+        <label class="sd-row">Release <input type="range" data-bind="release" min="0.01" max="3" step="0.01" /></label>
+        <label class="sd-row">Reverb send <input type="range" data-bind="reverbSend" min="0" max="1" step="0.01" /></label>
+        <label class="sd-row">Delay send  <input type="range" data-bind="delaySend"  min="0" max="1" step="0.01" /></label>
+      </div>
+
+      <!-- Ch4 — sample slicer -->
+      <div class="sd-strip" data-ch="3">
+        <div class="sd-strip-head">
+          <span class="sd-strip-num">4</span>
+          <span class="sd-strip-label">Slicer</span>
+        </div>
+        <div class="sd-drop" data-channel="ch4">
+          <div class="sd-drop-label">Drop long sample</div>
+          <div class="sd-drop-name muted" data-bind="filename">—</div>
+        </div>
+        <label class="sd-row">Reverb send <input type="range" data-bind="reverbSend" min="0" max="1" step="0.01" /></label>
+        <label class="sd-row">Delay send  <input type="range" data-bind="delaySend"  min="0" max="1" step="0.01" /></label>
+      </div>
+    </div>
+
+    <div class="sd-fx">
+      <div class="sd-fx-head">FX bus</div>
+      <label class="sd-row">
+        BPM
+        <input type="number" id="bpm-input" min="20" max="300" step="1" />
+      </label>
+      <label class="sd-row">
+        Delay step
+        <select id="delay-step">
+          <option value="1/4">1/4</option>
+          <option value="1/8">1/8</option>
+          <option value="1/8d">1/8 dotted</option>
+          <option value="1/16">1/16</option>
+        </select>
+      </label>
+      <label class="sd-row">Delay feedback <input type="range" id="delay-feedback" min="0" max="0.9" step="0.01" /></label>
+      <label class="sd-row">Reverb wet     <input type="range" id="reverb-wet"     min="0" max="1"   step="0.01" /></label>
+    </div>
+  </section>
 
   <section class="log-wrap">
     <h3>Live notes</h3>

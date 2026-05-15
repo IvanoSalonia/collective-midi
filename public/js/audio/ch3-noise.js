@@ -1,65 +1,85 @@
-// Channel 3 — synthesized noise/texture.
+// Channel 3 — synthesized noise/texture, parametrized.
 //
-// White noise → bandpass filter centered on the note's frequency, swept by
-// an LFO → amp envelope. Different notes produce different filter centers,
-// so the texture has pitched character without being a tone.
+// Noise (white/pink/brown) → static low-pass at user cutoff → ADR amp env
+// → destination. No per-note pitch tracking; the noise type and cutoff are
+// the character. Re-uses cached noise buffers per type to avoid per-voice
+// allocations.
 
-const NOTE_TO_HZ = (n) => 440 * Math.pow(2, (n - 69) / 12);
+const SUSTAIN_LEVEL = 0.6;
 
-// Reusable noise buffer so each voice doesn't re-allocate.
-let sharedNoiseBuffer = null;
-function makeNoiseBuffer(ctx) {
-  if (sharedNoiseBuffer) return sharedNoiseBuffer;
+const noiseBuffers = new Map(); // type -> AudioBuffer (per AudioContext lifetime)
+
+function getNoiseBuffer(ctx, type) {
+  const key = `${type}@${ctx.sampleRate}`;
+  if (noiseBuffers.has(key)) return noiseBuffers.get(key);
   const seconds = 4;
   const buf = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
   const data = buf.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-  sharedNoiseBuffer = buf;
+  if (type === 'white') {
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  } else if (type === 'pink') {
+    // Paul Kellet's economy pink noise approximation.
+    let b0=0, b1=0, b2=0, b3=0, b4=0, b5=0, b6=0;
+    for (let i = 0; i < data.length; i++) {
+      const w = Math.random() * 2 - 1;
+      b0 = 0.99886 * b0 + w * 0.0555179;
+      b1 = 0.99332 * b1 + w * 0.0750759;
+      b2 = 0.96900 * b2 + w * 0.1538520;
+      b3 = 0.86650 * b3 + w * 0.3104856;
+      b4 = 0.55000 * b4 + w * 0.5329522;
+      b5 = -0.7616 * b5 - w * 0.0168980;
+      data[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11;
+      b6 = w * 0.115926;
+    }
+  } else if (type === 'brown') {
+    let last = 0;
+    for (let i = 0; i < data.length; i++) {
+      const w = Math.random() * 2 - 1;
+      last = (last + 0.02 * w) / 1.02;
+      data[i] = last * 3.5; // compensate level
+    }
+  }
+  noiseBuffers.set(key, buf);
   return buf;
 }
 
 export class Ch3Noise {
-  constructor(ctx, destination) {
+  constructor(ctx, destination, settings) {
     this.ctx = ctx;
     this.destination = destination;
-    this.voices = new Map(); // note -> { source, lfo, lfoGain, filter, amp, stopped }
+    this.s = settings;
+    this.voices = new Map();
   }
+
+  updateSettings(s) { this.s = s; }
 
   noteOn(note, velocity) {
     const t = this.ctx.currentTime;
-    const freq = NOTE_TO_HZ(note);
     const v = Math.min(1, velocity / 127);
+    const peak = 0.25 * v;
 
     const source = this.ctx.createBufferSource();
-    source.buffer = makeNoiseBuffer(this.ctx);
+    source.buffer = getNoiseBuffer(this.ctx, this.s.noise);
     source.loop = true;
 
     const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.value = freq;
-    filter.Q.value = 12;
-
-    // LFO modulating the bandpass center for shimmer.
-    const lfo = this.ctx.createOscillator();
-    lfo.type = 'sine';
-    lfo.frequency.value = 3.5;
-    const lfoGain = this.ctx.createGain();
-    lfoGain.gain.value = freq * 0.15;
-    lfo.connect(lfoGain).connect(filter.frequency);
+    filter.type = 'lowpass';
+    filter.frequency.value = this.s.cutoff;
+    filter.Q.value = 1.5;
 
     const amp = this.ctx.createGain();
+    const a = Math.max(0.001, this.s.attack);
+    const d = Math.max(0.001, this.s.decay);
     amp.gain.setValueAtTime(0, t);
-    amp.gain.linearRampToValueAtTime(0.25 * v, t + 0.04);
-    amp.gain.linearRampToValueAtTime(0.18 * v, t + 0.5);
+    amp.gain.linearRampToValueAtTime(peak, t + a);
+    amp.gain.linearRampToValueAtTime(peak * SUSTAIN_LEVEL, t + a + d);
 
     source.connect(filter).connect(amp).connect(this.destination);
     source.start(t);
-    lfo.start(t);
 
     const existing = this.voices.get(note);
     if (existing) this._release(existing, t);
-
-    this.voices.set(note, { source, lfo, lfoGain, filter, amp, stopped: false });
+    this.voices.set(note, { source, filter, amp, stopped: false });
   }
 
   noteOff(note) {
@@ -71,11 +91,10 @@ export class Ch3Noise {
 
   _release(voice, t) {
     voice.stopped = true;
-    const release = 0.6;
+    const r = Math.max(0.005, this.s.release);
     voice.amp.gain.cancelScheduledValues(t);
     voice.amp.gain.setValueAtTime(voice.amp.gain.value, t);
-    voice.amp.gain.linearRampToValueAtTime(0, t + release);
-    voice.source.stop(t + release + 0.05);
-    voice.lfo.stop(t + release + 0.05);
+    voice.amp.gain.linearRampToValueAtTime(0, t + r);
+    voice.source.stop(t + r + 0.05);
   }
 }
