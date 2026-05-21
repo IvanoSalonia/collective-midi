@@ -105,9 +105,30 @@ function applyIncomingSettings(settings) {
 
 const overlay = document.getElementById('start-overlay');
 overlay.addEventListener('click', async () => {
+  // CRITICAL: iOS requires DeviceMotionEvent.requestPermission() to be
+  // awaited *first* inside the user-gesture handler. Any other awaits
+  // before it (fullscreen, audioCtx.resume, settings) cause iOS to lose
+  // the gesture context and silently refuse to show the permission popup.
+  await requestMotionPermission();
   await startEverything();
   overlay.classList.add('hidden');
 }, { once: true });
+
+async function requestMotionPermission() {
+  if (typeof DeviceMotionEvent === 'undefined') return;
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const result = await DeviceMotionEvent.requestPermission();
+      if (result === 'granted') window.addEventListener('devicemotion', onMotion);
+      else console.warn('motion permission:', result);
+    } catch (e) {
+      console.warn('motion permission threw:', e);
+    }
+  } else {
+    // Non-iOS, or iOS < 13: no permission gate.
+    window.addEventListener('devicemotion', onMotion);
+  }
+}
 
 async function startEverything() {
   // Try to enter fullscreen. Works on Android Chrome, iPad, and desktop.
@@ -128,20 +149,6 @@ async function startEverything() {
   stack = createAudioStack(audioCtx, settings);
   appliedSamples.ch2 = settings.samples.ch2;
   appliedSamples.ch4 = settings.samples.ch4;
-
-  // iOS 13+ requires explicit permission for DeviceMotion (and gates the
-  // sensor entirely without it). Non-iOS browsers just attach.
-  if (typeof DeviceMotionEvent !== 'undefined' &&
-      typeof DeviceMotionEvent.requestPermission === 'function') {
-    try {
-      const result = await DeviceMotionEvent.requestPermission();
-      if (result === 'granted') window.addEventListener('devicemotion', onMotion);
-    } catch (e) {
-      console.warn('motion permission denied:', e);
-    }
-  } else {
-    window.addEventListener('devicemotion', onMotion);
-  }
 
   // Keep the screen awake during the performance. Requires HTTPS, which
   // Railway provides. Supported on iOS 16.4+ and Chrome on Android.
