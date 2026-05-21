@@ -9,6 +9,7 @@
 //    and plays every channel's note locally (regardless of group routing).
 
 import { createAudioStack } from '/js/audio/audio-stack.js';
+import { createSequencer } from '/js/sequencer.js';
 
 const socket = io();
 
@@ -389,3 +390,16 @@ function onMidiMessage(e) {
 }
 
 initMidi();
+
+// --- Step sequencer -------------------------------------------------------
+// Lives on the conductor page, shares the same note-on/off socket path and
+// the same local rehearsal stack as live MIDI input.
+createSequencer({
+  socket,
+  getBpm: () => currentSettings?.bpm ?? 120,
+  getLocalStack: () => localStack,
+  isRehearsalOn,
+  ensureLocalStack,
+  flashChannel,
+  appendLog
+});
