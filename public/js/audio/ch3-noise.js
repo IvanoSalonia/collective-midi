@@ -1,14 +1,11 @@
 // Channel 3 — synthesized noise/texture, parametrized.
 //
-// Noise (white/pink/brown) → static low-pass at user cutoff → ADSR amp env
-// → destination. No per-note pitch tracking; the noise type and cutoff are
-// the character. Re-uses cached noise buffers per type to avoid per-voice
-// allocations.
-//
-// Envelope phases match Ch1: attack 0->peak, decay peak->peak*sustain,
-// sustain holds until note-off, release ramps from current value to 0.
+// Noise (white/pink/brown) → filter (lowpass OR bandpass, user-toggleable)
+// at user cutoff → ADSR amp envelope → channel-level tremolo gain →
+// destination. Same tremolo design as Ch1: single shared LFO modulates a
+// channel gain so all voices share modulation phase.
 
-const noiseBuffers = new Map(); // type -> AudioBuffer (per AudioContext lifetime)
+const noiseBuffers = new Map(); // type → AudioBuffer (per AudioContext lifetime)
 
 function getNoiseBuffer(ctx, type) {
   const key = `${type}@${ctx.sampleRate}`;
@@ -37,7 +34,7 @@ function getNoiseBuffer(ctx, type) {
     for (let i = 0; i < data.length; i++) {
       const w = Math.random() * 2 - 1;
       last = (last + 0.02 * w) / 1.02;
-      data[i] = last * 3.5; // compensate level
+      data[i] = last * 3.5;
     }
   }
   noiseBuffers.set(key, buf);
@@ -49,10 +46,39 @@ export class Ch3Noise {
     this.ctx = ctx;
     this.destination = destination;
     this.s = settings;
+
+    // Tremolo (channel-level, same approach as Ch1Voice).
+    this.tremGain = ctx.createGain();
+    this.tremGain.gain.value = 1;
+    this.tremGain.connect(destination);
+
+    this.lfoBias = ctx.createConstantSource();
+    this.lfo = ctx.createOscillator();
+    this.lfo.type = 'sine';
+    this.lfoDepthScale = ctx.createGain();
+    this.lfoBias.connect(this.tremGain.gain);
+    this.lfo.connect(this.lfoDepthScale).connect(this.tremGain.gain);
+    this.lfoBias.start();
+    this.lfo.start();
+
+    this._applyLfoParams();
+
     this.voices = new Map();
   }
 
-  updateSettings(s) { this.s = s; }
+  _applyLfoParams() {
+    const rate = Math.max(0.01, this.s.lfoRate ?? 4);
+    const depth = Math.max(0, Math.min(1, this.s.lfoDepth ?? 0));
+    const t = this.ctx.currentTime;
+    this.lfo.frequency.setTargetAtTime(rate, t, 0.05);
+    this.lfoDepthScale.gain.setTargetAtTime(depth * 0.5, t, 0.05);
+    this.lfoBias.offset.setTargetAtTime(1 - depth * 0.5, t, 0.05);
+  }
+
+  updateSettings(s) {
+    this.s = s;
+    this._applyLfoParams();
+  }
 
   noteOn(note, velocity) {
     const t = this.ctx.currentTime;
@@ -64,9 +90,11 @@ export class Ch3Noise {
     source.loop = true;
 
     const filter = this.ctx.createBiquadFilter();
-    filter.type = 'lowpass';
+    const filterType = this.s.filterType === 'bandpass' ? 'bandpass' : 'lowpass';
+    filter.type = filterType;
     filter.frequency.value = this.s.cutoff;
-    filter.Q.value = 1.5;
+    // Bandpass wants higher Q for resonant character; LP stays gentle.
+    filter.Q.value = filterType === 'bandpass' ? 6 : 1.5;
 
     const amp = this.ctx.createGain();
     const a = Math.max(0.001, this.s.attack);
@@ -76,7 +104,7 @@ export class Ch3Noise {
     amp.gain.linearRampToValueAtTime(peak, t + a);
     amp.gain.linearRampToValueAtTime(peak * sustainLevel, t + a + d);
 
-    source.connect(filter).connect(amp).connect(this.destination);
+    source.connect(filter).connect(amp).connect(this.tremGain);
     source.start(t);
 
     const existing = this.voices.get(note);

@@ -1,20 +1,21 @@
-// Channel 2 — pitched sample.
+// Channel 2 — general-purpose sampler.
 //
-// One user-supplied sample (uploaded via admin), C4 reference. Each note
-// plays the sample at the appropriate playbackRate. No synth params — the
-// only controls are FX sends (handled at the channel-strip layer).
+// One user-supplied sample, C4 reference pitch. Each note plays the sample
+// at a playbackRate computed from (note + transpose − C4). User controls:
+// volume, transpose (semitones), and full ADSR.
 
 const REFERENCE_NOTE = 60; // C4
 
 export class Ch2Sample {
-  constructor(ctx, destination /*, settings */) {
+  constructor(ctx, destination, settings) {
     this.ctx = ctx;
     this.destination = destination;
+    this.s = settings || {};
     this.buffer = null;
-    this.voices = new Map(); // note -> voice
+    this.voices = new Map();
   }
 
-  updateSettings(_s) { /* no synth params for this channel */ }
+  updateSettings(s) { this.s = s; }
 
   async load(url) {
     const res = await fetch(url);
@@ -27,15 +28,21 @@ export class Ch2Sample {
     if (!this.buffer) return;
     const t = this.ctx.currentTime;
     const v = Math.min(1, velocity / 127);
+    const volume = Math.max(0, Math.min(1, this.s.volume ?? 0.6));
+    const transpose = this.s.transpose ?? 0;
+    const peak = volume * v;
 
     const source = this.ctx.createBufferSource();
     source.buffer = this.buffer;
-    source.playbackRate.value = Math.pow(2, (note - REFERENCE_NOTE) / 12);
+    source.playbackRate.value = Math.pow(2, (note + transpose - REFERENCE_NOTE) / 12);
 
     const amp = this.ctx.createGain();
+    const a = Math.max(0.001, this.s.attack ?? 0.02);
+    const d = Math.max(0.001, this.s.decay ?? 0.2);
+    const sustainLevel = Math.max(0, Math.min(1, this.s.sustain ?? 0.7));
     amp.gain.setValueAtTime(0, t);
-    amp.gain.linearRampToValueAtTime(0.55 * v, t + 0.02);
-    amp.gain.setValueAtTime(0.55 * v, t + 0.02);
+    amp.gain.linearRampToValueAtTime(peak, t + a);
+    amp.gain.linearRampToValueAtTime(peak * sustainLevel, t + a + d);
 
     source.connect(amp).connect(this.destination);
     source.start(t);
@@ -60,10 +67,10 @@ export class Ch2Sample {
 
   _release(voice, t) {
     voice.stopped = true;
-    const release = 0.4;
+    const r = Math.max(0.005, this.s.release ?? 0.4);
     voice.amp.gain.cancelScheduledValues(t);
     voice.amp.gain.setValueAtTime(voice.amp.gain.value, t);
-    voice.amp.gain.linearRampToValueAtTime(0, t + release);
-    try { voice.source.stop(t + release + 0.05); } catch {}
+    voice.amp.gain.linearRampToValueAtTime(0, t + r);
+    try { voice.source.stop(t + r + 0.05); } catch {}
   }
 }

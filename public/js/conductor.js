@@ -203,6 +203,7 @@ function populateSettingsUI(s) {
   document.querySelectorAll('.sd-strip').forEach((stripEl) => {
     const ch = Number(stripEl.dataset.ch);
     const c = s.channels[ch];
+    if (!c) return;
     stripEl.querySelectorAll('[data-bind]').forEach((el) => {
       const key = el.dataset.bind;
       if (key === 'filename') {
@@ -211,7 +212,9 @@ function populateSettingsUI(s) {
         return;
       }
       if (c[key] === undefined) return;
-      if (el.tagName === 'SELECT' || el.type === 'range' || el.type === 'number') {
+      if (el.type === 'checkbox') {
+        if (document.activeElement !== el) el.checked = !!c[key];
+      } else if (el.tagName === 'SELECT' || el.type === 'range' || el.type === 'number') {
         setIfNotActive(el, c[key]);
       }
     });
@@ -235,10 +238,12 @@ document.querySelectorAll('.sd-strip').forEach((stripEl) => {
   stripEl.querySelectorAll('[data-bind]').forEach((el) => {
     const key = el.dataset.bind;
     if (key === 'filename') return; // display only
-    const evtName = (el.tagName === 'SELECT') ? 'change' : 'input';
+    const evtName = (el.tagName === 'SELECT' || el.type === 'checkbox') ? 'change' : 'input';
     el.addEventListener(evtName, () => {
-      const raw = el.value;
-      const value = (el.type === 'range' || el.type === 'number') ? Number(raw) : raw;
+      let value;
+      if (el.type === 'checkbox') value = el.checked;
+      else if (el.type === 'range' || el.type === 'number') value = Number(el.value);
+      else value = el.value;
       pushSettings(channelPatch(ch, { [key]: value }));
     });
   });

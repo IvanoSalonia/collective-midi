@@ -114,14 +114,22 @@ body.conductor {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.75rem 1rem;
+  padding: 0.6rem 0.9rem;
   border-bottom: 1px solid #1a1a1a;
   background: #0a0a0a;
+  gap: 0.6rem;
+  flex-wrap: wrap;
 }
 .bar-left, .bar-right {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+@media (max-width: 600px) {
+  .bar { padding: 0.5rem 0.7rem; gap: 0.4rem; }
+  .bar-left, .bar-right { gap: 0.5rem; }
+  .midi-select select { max-width: 140px; }
 }
 .muted { color: #888; font-size: 0.9rem; }
 
@@ -176,7 +184,10 @@ body.conductor {
   padding: 0.75rem 1rem;
 }
 @media (max-width: 720px) {
-  .groups { grid-template-columns: repeat(2, 1fr); }
+  .groups { grid-template-columns: repeat(2, 1fr); gap: 0.5rem; padding: 0.5rem 0.7rem; }
+}
+@media (max-width: 380px) {
+  .groups { grid-template-columns: 1fr; }
 }
 
 .group-cell {
@@ -248,7 +259,7 @@ body.conductor {
   gap: 0.75rem;
   padding: 0 1rem 1rem;
 }
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
   .sd-panel { grid-template-columns: 1fr; }
 }
 
@@ -257,9 +268,8 @@ body.conductor {
   grid-template-columns: repeat(4, 1fr);
   gap: 0.6rem;
 }
-@media (max-width: 900px) {
-  .sd-channels { grid-template-columns: repeat(2, 1fr); }
-}
+@media (max-width: 1100px) { .sd-channels { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px)  { .sd-channels { grid-template-columns: 1fr; } }
 
 .sd-strip,
 .sd-fx {
@@ -269,44 +279,70 @@ body.conductor {
   padding: 0.7rem 0.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
+  gap: 0.35rem;
 }
 
 .sd-strip-head {
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  margin-bottom: 0.2rem;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.25rem;
   border-bottom: 1px solid #1a1a1a;
-  padding-bottom: 0.4rem;
+  padding-bottom: 0.45rem;
 }
 .sd-strip-num {
-  font-size: 0.95rem;
-  font-weight: 600;
-  color: #fff;
+  width: 22px; height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #000;
+  background: var(--c, #fff);
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 .sd-strip-label {
   font-size: 0.8rem;
-  color: #888;
+  color: #ccc;
   text-transform: uppercase;
   letter-spacing: 0.06em;
 }
+
+/* Grouped sections inside a strip — small label + indented rows so the eye
+   can scan ADSR, LFO, Sends as distinct units. */
+.sd-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.45rem 0 0.15rem;
+  border-top: 1px dashed #1a1a1a;
+}
+.sd-section:first-of-type { border-top: none; padding-top: 0.2rem; }
+.sd-section-label {
+  font-size: 0.62rem;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.1rem;
+}
+
 .sd-fx-head {
   font-size: 0.8rem;
-  color: #888;
+  color: #ccc;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   border-bottom: 1px solid #1a1a1a;
-  padding-bottom: 0.4rem;
-  margin-bottom: 0.2rem;
+  padding-bottom: 0.45rem;
+  margin-bottom: 0.25rem;
 }
 
 .sd-row {
   display: grid;
-  grid-template-columns: 80px 1fr;
+  grid-template-columns: minmax(56px, 78px) 1fr;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: #aaa;
 }
 .sd-row select,
@@ -316,12 +352,23 @@ body.conductor {
   border: 1px solid #2a2a2a;
   border-radius: 4px;
   padding: 0.2rem 0.35rem;
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   width: 100%;
 }
 .sd-row input[type="range"] {
   width: 100%;
-  accent-color: #888;
+  accent-color: var(--c, #888);
+}
+/* Toggle row (checkbox) — keep label on left, switch on right; align with sliders. */
+.sd-row.sd-toggle {
+  cursor: pointer;
+}
+.sd-row.sd-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  justify-self: start;
+  accent-color: #58a6ff;
 }
 
 .sd-drop {
