@@ -1,10 +1,17 @@
 // Channel 1 — synthesized voice, parametrized.
 //
 // Two detuned oscillators (osc type configurable) → static low-pass at the
-// user-set cutoff → ADR amp envelope → destination. Polyphonic.
+// user-set cutoff → ADSR amp envelope → destination. Polyphonic.
+//
+// Envelope phases (per note):
+//   attack:  0     -> peak                (over `attack` seconds)
+//   decay:   peak  -> peak * sustain      (over `decay`  seconds)
+//   sustain: held at peak * sustain       (until note-off)
+//   release: current -> 0                 (over `release` seconds, from
+//                                          whatever amp value is current
+//                                          when note-off fires)
 
 const NOTE_TO_HZ = (n) => 440 * Math.pow(2, (n - 69) / 12);
-const SUSTAIN_LEVEL = 0.6; // implicit sustain — three knobs are A/D/R only
 
 export class Ch1Voice {
   constructor(ctx, destination, settings) {
@@ -37,9 +44,15 @@ export class Ch1Voice {
     const amp = this.ctx.createGain();
     const a = Math.max(0.001, this.s.attack);
     const d = Math.max(0.001, this.s.decay);
+    const sustainLevel = Math.max(0, Math.min(1, this.s.sustain ?? 0.6));
+    // Attack: 0 -> peak. Decay: peak -> peak * sustain. Then sustained
+    // (the last scheduled value persists) until _release schedules a ramp
+    // to 0. Release captures the *current* amp value at note-off, so a
+    // short note that is released mid-decay still ramps smoothly from
+    // wherever the decay had reached.
     amp.gain.setValueAtTime(0, t);
     amp.gain.linearRampToValueAtTime(peak, t + a);
-    amp.gain.linearRampToValueAtTime(peak * SUSTAIN_LEVEL, t + a + d);
+    amp.gain.linearRampToValueAtTime(peak * sustainLevel, t + a + d);
 
     osc1.connect(filter);
     osc2.connect(filter);

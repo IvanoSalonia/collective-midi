@@ -12,13 +12,13 @@ const DEFAULT_SETTINGS = {
   },
   // Channels are indexed 0..3 (matching MIDI channel 0..3 / Keystep ch1..4).
   channels: [
-    // ch1 — synth voice
-    { osc: 'sawtooth', cutoff: 1500, attack: 0.005, decay: 0.18, release: 0.35,
+    // ch1 — synth voice. Full ADSR: attack/decay/sustain (0..1 level)/release.
+    { osc: 'sawtooth', cutoff: 1500, attack: 0.005, decay: 0.18, sustain: 0.6, release: 0.35,
       reverbSend: 0.0, delaySend: 0.0 },
     // ch2 — pitched sample (no synth params, just send levels)
     { reverbSend: 0.0, delaySend: 0.0 },
-    // ch3 — noise/texture
-    { noise: 'white', cutoff: 800, attack: 0.04, decay: 0.4, release: 0.5,
+    // ch3 — noise/texture. Full ADSR.
+    { noise: 'white', cutoff: 800, attack: 0.04, decay: 0.4, sustain: 0.6, release: 0.5,
       reverbSend: 0.0, delaySend: 0.0 },
     // ch4 — sample slicer
     { reverbSend: 0.0, delaySend: 0.0 }

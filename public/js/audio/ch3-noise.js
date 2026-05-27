@@ -1,11 +1,12 @@
 // Channel 3 — synthesized noise/texture, parametrized.
 //
-// Noise (white/pink/brown) → static low-pass at user cutoff → ADR amp env
+// Noise (white/pink/brown) → static low-pass at user cutoff → ADSR amp env
 // → destination. No per-note pitch tracking; the noise type and cutoff are
 // the character. Re-uses cached noise buffers per type to avoid per-voice
 // allocations.
-
-const SUSTAIN_LEVEL = 0.6;
+//
+// Envelope phases match Ch1: attack 0->peak, decay peak->peak*sustain,
+// sustain holds until note-off, release ramps from current value to 0.
 
 const noiseBuffers = new Map(); // type -> AudioBuffer (per AudioContext lifetime)
 
@@ -70,9 +71,10 @@ export class Ch3Noise {
     const amp = this.ctx.createGain();
     const a = Math.max(0.001, this.s.attack);
     const d = Math.max(0.001, this.s.decay);
+    const sustainLevel = Math.max(0, Math.min(1, this.s.sustain ?? 0.6));
     amp.gain.setValueAtTime(0, t);
     amp.gain.linearRampToValueAtTime(peak, t + a);
-    amp.gain.linearRampToValueAtTime(peak * SUSTAIN_LEVEL, t + a + d);
+    amp.gain.linearRampToValueAtTime(peak * sustainLevel, t + a + d);
 
     source.connect(filter).connect(amp).connect(this.destination);
     source.start(t);
