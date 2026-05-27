@@ -35,7 +35,17 @@ const reverbWetEl = document.getElementById('reverb-wet');
 let groupCells = [];
 let groupColors = [];
 const chCells = [...document.querySelectorAll('.ch-meter .ch')];
-const chFlashTimers = new Map();
+
+// Active-note counters per group / per channel. The visual indicator stays
+// lit for the full duration a note is held (rather than a brief flash) by
+// toggling the class based on whether the count is > 0.
+//   - Groups: incremented on 'note-echo' kind=on, decremented on kind=off.
+//   - Channels: incremented on local note-on, decremented on local note-off.
+// Brief programmatic flashes (e.g. sequencer beat indication) go through
+// the legacy flashChannel() wrapper, which now also feeds the counter so
+// it composes correctly with a held MIDI note.
+const groupActiveCount = [];
+const chActiveCount = [0, 0, 0, 0];
 
 // Local copy of server settings, used to populate UI on first load and when
 // the server pushes updates. We avoid echoing our own changes back to the UI
@@ -113,7 +123,7 @@ socket.on('settings', (settings) => {
 socket.on('roster', applyRoster);
 
 socket.on('note-echo', ({ note, group, kind }) => {
-  flashGroup(group);
+  setGroupActive(group, kind === 'on');
   if (kind === 'on') appendLog(`${noteName(note)} → group ${group + 1}`);
 });
 
@@ -145,21 +155,35 @@ function buildGroupGrid(n, colors) {
   }
 }
 
-const flashTimers = new Map();
-function flashGroup(idx) {
+// Count-based: class is on while count > 0, off when count drops to 0.
+// CSS transitions smooth the on/off so very brief notes still produce a
+// visible pulse.
+function setGroupActive(idx, on) {
+  groupActiveCount[idx] = groupActiveCount[idx] || 0;
+  if (on) groupActiveCount[idx]++;
+  else groupActiveCount[idx] = Math.max(0, groupActiveCount[idx] - 1);
   const cell = groupCells[idx];
   if (!cell) return;
-  cell.classList.add('flash');
-  clearTimeout(flashTimers.get(idx));
-  flashTimers.set(idx, setTimeout(() => cell.classList.remove('flash'), 220));
+  if (groupActiveCount[idx] > 0) cell.classList.add('flash');
+  else cell.classList.remove('flash');
 }
 
-function flashChannel(ch) {
+function setChannelActive(ch, on) {
+  if (on) chActiveCount[ch]++;
+  else chActiveCount[ch] = Math.max(0, chActiveCount[ch] - 1);
   const cell = chCells[ch];
   if (!cell) return;
-  cell.classList.add('active');
-  clearTimeout(chFlashTimers.get(ch));
-  chFlashTimers.set(ch, setTimeout(() => cell.classList.remove('active'), 140));
+  if (chActiveCount[ch] > 0) cell.classList.add('active');
+  else cell.classList.remove('active');
+}
+
+// Backward-compatible brief-pulse helper. Used by the sequencer to indicate
+// a step beat. Implemented on top of the counter so it composes cleanly
+// with a sustained MIDI note (the held note keeps the count above zero
+// even after this transient decrement).
+function flashChannel(ch) {
+  setChannelActive(ch, true);
+  setTimeout(() => setChannelActive(ch, false), 140);
 }
 
 const MAX_LOG = 40;
@@ -379,13 +403,14 @@ function onMidiMessage(e) {
   if (channel > 3) return;
 
   if (cmd === 0x90 && d2 > 0) {
-    flashChannel(channel);
+    setChannelActive(channel, true);
     socket.emit('note-on', { channel, note: d1, velocity: d2 });
     if (isRehearsalOn() && localStack) {
       try { localStack.noteOn(channel, d1, d2); }
       catch (e) { appendLog(`ch${channel + 1} note-on err: ${e.message}`); console.error(e); }
     }
   } else if (cmd === 0x80 || (cmd === 0x90 && d2 === 0)) {
+    setChannelActive(channel, false);
     socket.emit('note-off', { channel, note: d1 });
     if (isRehearsalOn() && localStack) {
       try { localStack.noteOff(channel, d1); }
