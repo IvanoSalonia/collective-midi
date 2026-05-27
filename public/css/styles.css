@@ -44,6 +44,51 @@ body.audience {
   transition: opacity 0s;
 }
 
+/* Shake-to-mute overlay. Sits above the color fill (z-index 20 vs 1).
+   Semi-transparent so the audience can still glimpse the color firing
+   underneath if they want, but the focus is the reactivate button. */
+.mute-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 1.5rem;
+  transition: opacity 0.18s ease;
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+}
+.mute-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.mute-btn {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 14px;
+  color: #fff;
+  padding: 1.4rem 2rem;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  min-width: 70%;
+  max-width: 360px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+}
+.mute-btn:active { background: #242424; }
+.mute-btn-label {
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.mute-btn-sub {
+  font-size: 0.85rem;
+  color: #888;
+  margin-top: 0.3rem;
+}
+
 /* iPhone-only "Add to Home Screen" prompt — shown after the start tap when
    Safari is not yet in standalone mode. Sits at the bottom; dismissible. */
 .a2hs-prompt {

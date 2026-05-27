@@ -35,7 +35,15 @@ let weights = { A: 1, B: 0, C: 0 };
 let rawGamma = 0;        // latest DeviceOrientation gamma
 let smoothedGamma = 0;   // smoothed for stable interpolation
 
+// Shake-to-mute state. Audio is muted locally (master gain ramped to 0);
+// previousMasterGain holds the value we restore on tap. The overlay button
+// is the only way to unmute — shaking again does nothing while muted.
+let muted = false;
+let previousMasterGain = 0.7;
+
 const fillEl = document.getElementById('color-fill');
+const muteOverlayEl = document.getElementById('mute-overlay');
+const muteReactivateEl = document.getElementById('mute-reactivate');
 
 // --- Socket wiring -------------------------------------------------------
 
@@ -116,8 +124,9 @@ async function startEverything() {
   appliedSamples.ch4 = settings.samples.ch4;
   stack.setOrientation(weights);
 
-  // iOS 13+: must request DeviceOrientation permission from a user gesture.
-  // We also request DeviceMotion for consistency per spec (unused here).
+  // iOS 13+: must request DeviceOrientation and DeviceMotion permission
+  // from a user gesture. Orientation drives the A/B/C interpolation;
+  // motion drives shake-to-mute detection.
   if (typeof DeviceOrientationEvent !== 'undefined' &&
       typeof DeviceOrientationEvent.requestPermission === 'function') {
     try {
@@ -125,11 +134,19 @@ async function startEverything() {
       if (r === 'granted') window.addEventListener('deviceorientation', onOrientation);
     } catch (e) { console.warn('orientation permission denied:', e); }
     if (typeof DeviceMotionEvent?.requestPermission === 'function') {
-      try { await DeviceMotionEvent.requestPermission(); } catch {}
+      try {
+        const r = await DeviceMotionEvent.requestPermission();
+        if (r === 'granted') window.addEventListener('devicemotion', onMotion);
+      } catch (e) { console.warn('motion permission denied:', e); }
+    } else {
+      window.addEventListener('devicemotion', onMotion);
     }
   } else {
     window.addEventListener('deviceorientation', onOrientation);
+    window.addEventListener('devicemotion', onMotion);
   }
+
+  muteReactivateEl?.addEventListener('click', reactivate);
 
   await requestWakeLock();
   maybeShowAddToHomeScreenPrompt();
@@ -148,6 +165,38 @@ function waitForSettings() {
 
 function onOrientation(e) {
   if (e.gamma !== null && e.gamma !== undefined) rawGamma = e.gamma;
+}
+
+// --- Shake-to-mute ------------------------------------------------------
+
+// m/s² magnitude of `acceleration` (excludes gravity) that counts as a shake.
+// A still phone reads ≈ 0; light handling reads 1–5; a flick 5–15; a
+// deliberate shake exceeds 20.
+const SHAKE_THRESHOLD = 22;
+
+function onMotion(e) {
+  if (muted) return; // already muted — ignore further shakes
+  const a = e.acceleration; // gravity-excluded
+  if (!a) return;
+  const mag = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
+  if (mag > SHAKE_THRESHOLD) mute();
+}
+
+function mute() {
+  if (muted || !stack) return;
+  muted = true;
+  // Save the master gain we'll restore on reactivate, then ramp to 0 fast
+  // enough to feel instant but slow enough to avoid a click.
+  previousMasterGain = stack.masterGain.gain.value;
+  stack.masterGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.005);
+  muteOverlayEl?.classList.remove('hidden');
+}
+
+function reactivate() {
+  if (!muted || !stack) return;
+  muted = false;
+  stack.masterGain.gain.setTargetAtTime(previousMasterGain, audioCtx.currentTime, 0.01);
+  muteOverlayEl?.classList.add('hidden');
 }
 
 // --- Wake Lock (carry over) ---------------------------------------------

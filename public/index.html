@@ -28,6 +28,15 @@
        interpolated channel color; toggling .lit fades opacity. -->
   <div id="color-fill"></div>
 
+  <!-- Shake-to-mute overlay. Hidden until the audience shakes their phone;
+       tapping the button restores audio. Local to this phone only. -->
+  <div id="mute-overlay" class="mute-overlay hidden">
+    <button class="mute-btn" id="mute-reactivate">
+      <div class="mute-btn-label">Muted</div>
+      <div class="mute-btn-sub">Tap to reactivate</div>
+    </button>
+  </div>
+
   <!-- iPhone-only "Add to Home Screen" hint (only fires on Safari iPhone). -->
   <div id="a2hs-prompt" class="a2hs-prompt hidden">
     <div class="a2hs-text">
