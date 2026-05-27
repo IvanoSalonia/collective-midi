@@ -1,5 +1,15 @@
 // Server-side defaults for sound-design settings.
-// Sent to every client on connect; the conductor mutates them via socket events.
+//
+// Each channel has THREE states (A, B, C) that correspond to phone
+// orientations:
+//   A = portrait (default)
+//   B = landscape right
+//   C = landscape left
+//
+// The audience phone interpolates between these states continuously as the
+// device tilts, producing a smooth crossfade of color AND every sound
+// design parameter. The values below are the spec's percentages converted
+// to engine-native units via each slider's min/max range.
 //
 // Channels are indexed 0..3 (matching MIDI channel 0..3 / Keystep ch1..4).
 
@@ -10,55 +20,172 @@ const DEFAULT_SETTINGS = {
     feedback: 0.4         // 0..0.9
   },
   reverb: {
-    wet: 0.9              // 0..1, master wet level on the reverb bus output
+    wet: 0.9              // 0..1
   },
   channels: [
-    // ch1 — synth voice
+    // -----------------------------------------------------------------
+    // CH1 — synth voice
+    // -----------------------------------------------------------------
     {
-      osc: 'sawtooth',
-      detune: 8,          // cents (osc2 vs osc1)
-      cutoff: 1500,       // Hz, static low-pass
-      lfoRate: 5,         // Hz, tremolo
-      lfoDepth: 0,        // 0..1, tremolo depth (0 = off)
-      attack: 0.005,
-      decay: 0.18,
-      sustain: 0.6,       // 0..1, level held during sustain phase
-      release: 0.35,
-      reverbSend: 0.0,
-      delaySend: 0.0
+      A: {
+        color: '#42EA33',
+        osc: 'sine',
+        detune: 7.5,      // cents (slider 0..50, 15%)
+        cutoff: 3644,     // Hz   (slider 80..8000, 45%)
+        lfoRate: 7.07,    // Hz   (slider 0.1..20, 35%)
+        lfoDepth: 0.55,   //      (0..1, 55%)
+        attack: 0.10,     // s    (slider 0.001..2, 5%)
+        decay: 1.06,      // s    (slider 0.01..3, 35%)
+        sustain: 0.5,     //      (0..1, 50%)
+        release: 1.21,    // s    (slider 0.01..3, 40%)
+        reverbSend: 0.40,
+        delaySend: 0.25
+      },
+      B: {
+        color: '#02C9DF',
+        osc: 'sine',
+        detune: 0,
+        cutoff: 5624,     // 70%
+        lfoRate: 4.08,    // 20%
+        lfoDepth: 0.65,
+        attack: 0.10,
+        decay: 0.91,      // 30%
+        sustain: 0.45,
+        release: 0.61,    // 20%
+        reverbSend: 0.55,
+        delaySend: 0.10
+      },
+      C: {
+        color: '#0739FF',
+        osc: 'sine',
+        detune: 20,       // 40%
+        cutoff: 2456,     // 30%
+        lfoRate: 12.04,   // 60%
+        lfoDepth: 0.15,
+        attack: 0.10,
+        decay: 1.21,      // 40%
+        sustain: 0.55,
+        release: 1.36,    // 45%
+        reverbSend: 0.30,
+        delaySend: 0.10
+      }
     },
-    // ch2 — sampler (drag & drop sample, pitched + ADSR)
+
+    // -----------------------------------------------------------------
+    // CH2 — sampler
+    // -----------------------------------------------------------------
     {
-      volume: 0.6,        // 0..1
-      transpose: 0,       // semitones (-24..+24), applied on top of note pitch
-      attack: 0.02,
-      decay: 0.2,
-      sustain: 0.7,
-      release: 0.4,
-      reverbSend: 0.0,
-      delaySend: 0.0
+      A: {
+        color: '#DD1414',
+        volume: 0.72,
+        transpose: -1,    // (-24..24, 48%)
+        attack: 0.08,     // 4%
+        decay: 0.97,      // 32%
+        sustain: 0.58,
+        release: 0.55,    // 18%
+        reverbSend: 0.08,
+        delaySend: 0.06
+      },
+      B: {
+        color: '#FF8307',
+        volume: 0.95,
+        transpose: 6,     // (62%)
+        attack: 0.08,
+        decay: 1.42,      // 47%
+        sustain: 0.68,
+        release: 2.64,    // 88%
+        reverbSend: 0.12,
+        delaySend: 0.08
+      },
+      C: {
+        color: '#FF07B5',
+        volume: 0.88,
+        transpose: -4,    // (42%)
+        attack: 0.08,
+        decay: 0.85,      // 28%
+        sustain: 0.52,
+        release: 0.37,    // 12%
+        reverbSend: 0.72,
+        delaySend: 0.08
+      }
     },
-    // ch3 — 2-op FM synth (Volca FM inspired character)
+
+    // -----------------------------------------------------------------
+    // CH3 — 2-op FM synth (Volca FM character)
+    // -----------------------------------------------------------------
     {
-      ratio: 2,           // modulator freq / carrier freq
-      modIndex: 3,        // dimensionless; peak Hz deviation = modIndex * modFreq
-      lfoRate: 3,         // Hz, LFO modulating the mod index
-      lfoDepth: 0.5,      // adds ± this much to the index, scaled by modFreq
-      attack: 0.005,
-      decay: 0.3,
-      sustain: 0.2,
-      release: 0.3,
-      reverbSend: 0.0,
-      delaySend: 0.0
+      A: {
+        color: '#FFFFFF',
+        ratio: 10,        // (0.25..16, 62%)
+        modIndex: 1.8,    // (0..10, 18%)
+        lfoRate: 7.07,    // (0.1..20, 35%)
+        lfoDepth: 2.04,   // (0..3, 68%)
+        attack: 0.10,
+        decay: 1.56,      // 52%
+        sustain: 0.42,
+        release: 1.15,    // 38%
+        reverbSend: 0.35,
+        delaySend: 0.08
+      },
+      B: {
+        color: '#A57EE8',
+        ratio: 11.6,      // 72%
+        modIndex: 5.8,    // 58%
+        lfoRate: 4.48,    // 22%
+        lfoDepth: 2.94,   // 98%
+        attack: 0.10,
+        decay: 1.65,      // 55%
+        sustain: 0.45,
+        release: 0.97,    // 32%
+        reverbSend: 0.28,
+        delaySend: 0.35
+      },
+      C: {
+        color: '#619CD3',
+        ratio: 6.25,      // 38%
+        modIndex: 2.8,    // 28%
+        lfoRate: 13.63,   // 68%
+        lfoDepth: 0.36,   // 12%
+        attack: 0.10,
+        decay: 1.27,      // 42%
+        sustain: 0.38,
+        release: 1.27,    // 42%
+        reverbSend: 0.42,
+        delaySend: 0.22
+      }
     },
-    // ch4 — slicer
+
+    // -----------------------------------------------------------------
+    // CH4 — slicer
+    // -----------------------------------------------------------------
     {
-      volume: 0.6,
-      startPoint: 0,      // 0..1 normalized offset into buffer where slice grid begins
-      loop: false,        // if true, slice loops between its bounds until note-off
-      sliceCount: 36,     // number of slices in the usable region
-      reverbSend: 0.0,
-      delaySend: 0.0
+      A: {
+        color: '#1417DD',
+        volume: 0.72,
+        startPoint: 0.28,
+        sliceCount: 16,   // (4..72, 18%)
+        loop: false,
+        reverbSend: 0.68,
+        delaySend: 0.35
+      },
+      B: {
+        color: '#4DDE9F',
+        volume: 0.95,
+        startPoint: 0.18,
+        sliceCount: 30,   // (38%)
+        loop: true,
+        reverbSend: 0.42,
+        delaySend: 0.08
+      },
+      C: {
+        color: '#D178F4',
+        volume: 0.88,
+        startPoint: 0.42,
+        sliceCount: 16,
+        loop: false,
+        reverbSend: 0.68,
+        delaySend: 0.35
+      }
     }
   ],
   samples: {

@@ -10,14 +10,13 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="Collective MIDI" />
-  <!-- Same for Android Chrome / generic PWA. -->
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="theme-color" content="#000000" />
   <link rel="manifest" href="/manifest.webmanifest" />
 </head>
 <body class="audience">
-  <!-- Tap-to-start overlay. iOS requires a user gesture to (a) unlock AudioContext
-       and (b) request DeviceOrientation permission. We fold both into one tap. -->
+  <!-- Tap-to-start overlay. iOS requires a user gesture for AudioContext
+       and DeviceOrientation permission; we fold both into one tap. -->
   <div id="start-overlay">
     <div class="start-inner">
       <div class="start-title">Tap to join</div>
@@ -25,10 +24,11 @@
     </div>
   </div>
 
-  <canvas id="stage"></canvas>
+  <!-- Full-screen color fill. JS sets backgroundColor to the current
+       interpolated channel color; toggling .lit fades opacity. -->
+  <div id="color-fill"></div>
 
-  <!-- iPhone-only "Add to Home Screen" hint. Shown after the join tap if
-       Safari isn't in standalone mode and the user hasn't dismissed it before. -->
+  <!-- iPhone-only "Add to Home Screen" hint (only fires on Safari iPhone). -->
   <div id="a2hs-prompt" class="a2hs-prompt hidden">
     <div class="a2hs-text">
       For full screen: tap
@@ -40,7 +40,6 @@
     <button class="a2hs-dismiss" aria-label="Dismiss">×</button>
   </div>
 
-  <!-- Module entry point -->
   <script src="/socket.io/socket.io.js"></script>
   <script type="module" src="/js/audience.js"></script>
 </body>

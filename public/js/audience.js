@@ -1,61 +1,41 @@
 // Audience client — runs on each phone.
 //
-// Visual: a single dot floating on a black canvas. The dot is a small physics
-// object — accelerometer impulses push it, then it drifts and bounces off the
-// edges with heavy damping. Its position controls the master low-pass filter
-// (X = cutoff, Y = resonance), so each phone shapes its sound by being moved.
-// Brightness tracks note state: spikes on note-on, holds while a note is held,
-// fades on note-off.
+// Visual: a single full-screen colored div on top of a black body. When a
+// note is held for this phone's channel, the div is opaque and shows the
+// current interpolated color. When the last note releases, the div fades
+// to invisible over 0.2s, revealing black.
+//
+// Audio + color reactivity: each channel has THREE orientation states
+// (A/B/C) of sound design + color. The device's DeviceOrientationEvent
+// gamma drives an A/B/C weight vector; as the phone tilts, the weights
+// blend smoothly, and both the audio engine settings and the fill color
+// update in real time.
+//
+//   gamma ≈   0  → 100% A  (portrait, no tilt)
+//   gamma ≈ +90  → 100% B  (right edge down — "landscape right")
+//   gamma ≈ -90  → 100% C  (left edge down — "landscape left")
+//   in between  → linear blend across A↔B or A↔C
 
 import { createAudioStack } from '/js/audio/audio-stack.js';
 
 const socket = io();
 
-// --- Settings / connection state -----------------------------------------
+// --- State ---------------------------------------------------------------
 
 let audioCtx = null;
 let stack = null;
 let pendingSettings = null;
 let appliedSamples = { ch2: null, ch4: null };
-let myGroup = null;
-let myColor = '#ffffff';
-
-// Note state — how many notes are currently held for this phone's group.
+let myGroup = null;  // 0..3
 let activeNotes = 0;
 
-// --- Physics dot ---------------------------------------------------------
-// Impulse accumulator: motion events between frames sum into here, then the
-// render loop applies them as one impulse and clears. Avoids both
-// per-frame integration drift and event-rate dependence.
-const pendingImpulse = { x: 0, y: 0 };
+// Orientation weights (sum to 1). Default to A.
+let weights = { A: 1, B: 0, C: 0 };
 
-const dot = { x: 0, y: 0, vx: 0, vy: 0, initialized: false };
+let rawGamma = 0;        // latest DeviceOrientation gamma
+let smoothedGamma = 0;   // smoothed for stable interpolation
 
-// Tunables. Calibrated against typical iPhone DeviceMotion readings
-// (~30Hz event rate; flick ≈ 5-30 m/s², still phone ≈ 0.05-0.15 m/s²).
-const PHYSICS = {
-  noiseFloor: 0.25,   // m/s² — readings below this are treated as zero
-  impulseScale: 0.45, // px-of-velocity per (m/s² · dpr)
-  damping: 0.985,     // velocity multiplier per frame (~60fps)
-  bounce: 0.6,        // velocity retained on edge bounce
-  margin: 30          // px from each edge (matches original spec)
-};
-
-const FILTER = {
-  cutoffMin: 200, cutoffMax: 8000,  // Hz, log-mapped
-  qMin: 0.5, qMax: 10,              // resonance, linear
-  smoothing: 0.05                    // smoothing factor per frame for filter param
-};
-
-const BRIGHTNESS = {
-  base: 0.35,           // alpha when no notes have ever played
-  attack: 0.35,         // smoothing when activeNotes > 0
-  release: 0.06         // smoothing when activeNotes == 0 (slow fade)
-};
-
-let smoothedCutoff = 1500;
-let smoothedQ = 1;
-let visualBrightness = 0;
+const fillEl = document.getElementById('color-fill');
 
 // --- Socket wiring -------------------------------------------------------
 
@@ -63,9 +43,8 @@ socket.on('connect', () => socket.emit('hello', { role: 'audience' }));
 
 socket.on('assigned', ({ group, color, settings }) => {
   myGroup = group;
-  myColor = color;
-  document.documentElement.style.setProperty('--group-color', color);
   pendingSettings = settings;
+  document.documentElement.style.setProperty('--group-color', color);
   const sub = document.getElementById('start-sub');
   if (sub) sub.textContent = `Group ${group + 1}`;
 });
@@ -79,16 +58,26 @@ socket.on('note-on', ({ channel, note, velocity }) => {
   if (!stack) return;
   stack.noteOn(channel, note, velocity ?? 100);
   activeNotes++;
+  // Snap fill to current interpolated color and reveal.
+  if (myGroup !== null) {
+    fillEl.style.backgroundColor = stack.getInterpolatedColor(myGroup, weights);
+  }
+  fillEl.classList.add('lit');
 });
 
 socket.on('note-off', ({ channel, note }) => {
   if (!stack) return;
   stack.noteOff(channel, note);
   activeNotes = Math.max(0, activeNotes - 1);
+  if (activeNotes === 0) {
+    fillEl.classList.remove('lit'); // CSS transitions opacity to 0 over 0.2s
+  }
 });
 
 function applyIncomingSettings(settings) {
   stack.applySettings(settings);
+  // Re-apply orientation so engines pick up the new per-state values.
+  stack.setOrientation(weights);
   if (settings.samples.ch2 !== appliedSamples.ch2) {
     stack.reloadSample(1, settings.samples.ch2).catch((e) =>
       console.warn('ch2 reload failed:', e.message));
@@ -101,83 +90,85 @@ function applyIncomingSettings(settings) {
   }
 }
 
-// --- Start tap (unlock audio + ask for motion permission) ----------------
+// --- Start tap: unlock audio, request permissions, go fullscreen --------
 
 const overlay = document.getElementById('start-overlay');
 overlay.addEventListener('click', async () => {
-  // CRITICAL: iOS requires DeviceMotionEvent.requestPermission() to be
-  // awaited *first* inside the user-gesture handler. Any other awaits
-  // before it (fullscreen, audioCtx.resume, settings) cause iOS to lose
-  // the gesture context and silently refuse to show the permission popup.
-  await requestMotionPermission();
   await startEverything();
   overlay.classList.add('hidden');
 }, { once: true });
 
-async function requestMotionPermission() {
-  if (typeof DeviceMotionEvent === 'undefined') return;
-  if (typeof DeviceMotionEvent.requestPermission === 'function') {
-    try {
-      const result = await DeviceMotionEvent.requestPermission();
-      if (result === 'granted') window.addEventListener('devicemotion', onMotion);
-      else console.warn('motion permission:', result);
-    } catch (e) {
-      console.warn('motion permission threw:', e);
-    }
-  } else {
-    // Non-iOS, or iOS < 13: no permission gate.
-    window.addEventListener('devicemotion', onMotion);
-  }
-}
-
 async function startEverything() {
-  // Try to enter fullscreen. Works on Android Chrome, iPad, and desktop.
-  // iPhone Safari doesn't support requestFullscreen on arbitrary elements
-  // and will throw — caught and ignored. (For iPhone the path is "Add to
-  // Home Screen", which uses the manifest + apple-mobile-web-app-capable
-  // meta tag to open standalone.)
+  // Fullscreen — works on Android/iPad/desktop. iPhone Safari throws (no
+  // fullscreen API for arbitrary pages), caught and ignored.
   try {
     const root = document.documentElement;
     if (root.requestFullscreen) await root.requestFullscreen({ navigationUI: 'hide' });
     else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
-  } catch { /* iPhone Safari, user denied, etc. */ }
+  } catch { /* iPhone Safari etc. */ }
 
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') await audioCtx.resume();
-  const settings = pendingSettings || await waitForSettings();
 
+  const settings = pendingSettings || await waitForSettings();
   stack = createAudioStack(audioCtx, settings);
   appliedSamples.ch2 = settings.samples.ch2;
   appliedSamples.ch4 = settings.samples.ch4;
+  stack.setOrientation(weights);
 
-  // Keep the screen awake during the performance. Requires HTTPS, which
-  // Railway provides. Supported on iOS 16.4+ and Chrome on Android.
-  // The OS releases the lock when the tab goes to background — we re-request
-  // it on visibilitychange below.
+  // iOS 13+: must request DeviceOrientation permission from a user gesture.
+  // We also request DeviceMotion for consistency per spec (unused here).
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r === 'granted') window.addEventListener('deviceorientation', onOrientation);
+    } catch (e) { console.warn('orientation permission denied:', e); }
+    if (typeof DeviceMotionEvent?.requestPermission === 'function') {
+      try { await DeviceMotionEvent.requestPermission(); } catch {}
+    }
+  } else {
+    window.addEventListener('deviceorientation', onOrientation);
+  }
+
   await requestWakeLock();
-
   maybeShowAddToHomeScreenPrompt();
-
   requestAnimationFrame(render);
 }
 
-// iPhone Safari can't be put into fullscreen via JS — the only way to hide
-// browser chrome there is for the user to "Add to Home Screen" and open
-// from the icon (which uses the standalone meta tags + manifest).
-//
-// Chrome on iOS is *also* WebKit (Apple mandates it) but it does NOT
-// honor the standalone meta tags — its "Add to Home Screen" creates an
-// icon that opens Chrome normally, with full chrome. No fullscreen path
-// exists for Chrome iOS, so we skip the prompt there entirely rather than
-// give misleading advice.
-//
-// Show the prompt only on Safari iPhone, when not already standalone, and
-// remember dismissal so we don't nag.
+function waitForSettings() {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (pendingSettings) resolve(pendingSettings);
+      else setTimeout(check, 50);
+    };
+    check();
+  });
+}
+
+function onOrientation(e) {
+  if (e.gamma !== null && e.gamma !== undefined) rawGamma = e.gamma;
+}
+
+// --- Wake Lock (carry over) ---------------------------------------------
+
+let wakeLock = null;
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch (e) { console.warn('wake lock failed:', e.message); }
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !wakeLock && stack) requestWakeLock();
+});
+
+// --- iPhone Safari A2HS hint --------------------------------------------
+
 function maybeShowAddToHomeScreenPrompt() {
   const ua = navigator.userAgent;
   const isIPhone = /iPhone|iPod/.test(ua);
-  // CriOS = Chrome iOS, FxiOS = Firefox iOS, EdgiOS = Edge iOS.
-  // None of these can give a true standalone experience.
   const isThirdPartyIOSBrowser = /CriOS|FxiOS|EdgiOS|OPiOS/.test(ua);
   const isStandalone =
     window.navigator.standalone === true ||
@@ -195,143 +186,27 @@ function maybeShowAddToHomeScreenPrompt() {
   }, { once: true });
 }
 
-let wakeLock = null;
-
-async function requestWakeLock() {
-  if (!('wakeLock' in navigator)) return;
-  try {
-    wakeLock = await navigator.wakeLock.request('screen');
-    wakeLock.addEventListener('release', () => { wakeLock = null; });
-  } catch (e) {
-    console.warn('wake lock failed:', e.message);
-  }
-}
-
-document.addEventListener('visibilitychange', () => {
-  // Stack only exists after the tap-to-join, so this is a no-op until the
-  // user has actually engaged with the page.
-  if (document.visibilityState === 'visible' && !wakeLock && stack) {
-    requestWakeLock();
-  }
-});
-
-function waitForSettings() {
-  return new Promise((resolve) => {
-    const check = () => {
-      if (pendingSettings) resolve(pendingSettings);
-      else setTimeout(check, 50);
-    };
-    check();
-  });
-}
-
-// Accumulate motion impulses between frames. `acceleration` excludes gravity,
-// so a still phone reads ~0 (modulo small sensor noise filtered below).
-function onMotion(e) {
-  const a = e.acceleration;
-  if (!a) return;
-  const ax = (a.x != null && Math.abs(a.x) > PHYSICS.noiseFloor) ? a.x : 0;
-  const ay = (a.y != null && Math.abs(a.y) > PHYSICS.noiseFloor) ? a.y : 0;
-  pendingImpulse.x += ax;
-  pendingImpulse.y += ay;
-}
-
-// --- Render loop ---------------------------------------------------------
-
-const canvas = document.getElementById('stage');
-const ctx = canvas.getContext('2d');
-let dpr = window.devicePixelRatio || 1;
-
-function resizeCanvas() {
-  dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.floor(window.innerWidth * dpr);
-  canvas.height = Math.floor(window.innerHeight * dpr);
-  canvas.style.width = window.innerWidth + 'px';
-  canvas.style.height = window.innerHeight + 'px';
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
+// --- Render loop --------------------------------------------------------
 
 function render() {
-  const W = canvas.width;
-  const H = canvas.height;
-  const margin = PHYSICS.margin * dpr;
+  // Smooth gamma so the blend doesn't jitter from sensor noise.
+  smoothedGamma += (rawGamma - smoothedGamma) * 0.08;
 
-  if (!dot.initialized) {
-    dot.x = W / 2;
-    dot.y = H / 2;
-    dot.initialized = true;
-  }
+  const g = Math.max(-90, Math.min(90, smoothedGamma));
+  const wA = Math.max(0, 1 - Math.abs(g) / 90);
+  const wB = Math.max(0, g / 90);
+  const wC = Math.max(0, -g / 90);
+  const sum = wA + wB + wC || 1;
+  weights = { A: wA / sum, B: wB / sum, C: wC / sum };
 
-  // 1. Apply pending impulse from motion events. Y is flipped because canvas
-  //    Y grows downward but phone "up" is positive accel.y.
-  dot.vx += pendingImpulse.x * PHYSICS.impulseScale * dpr;
-  dot.vy += -pendingImpulse.y * PHYSICS.impulseScale * dpr;
-  pendingImpulse.x = 0;
-  pendingImpulse.y = 0;
-
-  // 2. Damping (high viscosity).
-  dot.vx *= PHYSICS.damping;
-  dot.vy *= PHYSICS.damping;
-
-  // 3. Integrate position.
-  dot.x += dot.vx;
-  dot.y += dot.vy;
-
-  // 4. Bounce off edges.
-  if (dot.x < margin)        { dot.x = margin;        dot.vx = -dot.vx * PHYSICS.bounce; }
-  if (dot.x > W - margin)    { dot.x = W - margin;    dot.vx = -dot.vx * PHYSICS.bounce; }
-  if (dot.y < margin)        { dot.y = margin;        dot.vy = -dot.vy * PHYSICS.bounce; }
-  if (dot.y > H - margin)    { dot.y = H - margin;    dot.vy = -dot.vy * PHYSICS.bounce; }
-
-  // 5. Map dot position → filter params (slow / smoothed).
-  const usableW = Math.max(1, W - 2 * margin);
-  const usableH = Math.max(1, H - 2 * margin);
-  const xNorm = (dot.x - margin) / usableW; // 0..1
-  const yNorm = (dot.y - margin) / usableH; // 0..1
-  const targetCutoff = FILTER.cutoffMin * Math.pow(FILTER.cutoffMax / FILTER.cutoffMin, xNorm);
-  const targetQ = FILTER.qMin + (1 - yNorm) * (FILTER.qMax - FILTER.qMin); // top of screen = high Q
-  smoothedCutoff += (targetCutoff - smoothedCutoff) * FILTER.smoothing;
-  smoothedQ += (targetQ - smoothedQ) * FILTER.smoothing;
   if (stack) {
-    stack.masterFilter.frequency.setTargetAtTime(smoothedCutoff, audioCtx.currentTime, 0.05);
-    stack.masterFilter.Q.setTargetAtTime(smoothedQ, audioCtx.currentTime, 0.05);
+    stack.setOrientation(weights);
+    // Update fill color live while notes are held so the audience sees the
+    // crossfade in real time as they tilt the phone.
+    if (activeNotes > 0 && myGroup !== null) {
+      fillEl.style.backgroundColor = stack.getInterpolatedColor(myGroup, weights);
+    }
   }
-
-  // 6. Brightness envelope — fast attack while notes are held, slow release.
-  const target = activeNotes > 0 ? 1 : 0;
-  const k = activeNotes > 0 ? BRIGHTNESS.attack : BRIGHTNESS.release;
-  visualBrightness += (target - visualBrightness) * k;
-
-  // 7. Draw.
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, W, H);
-
-  const radius = Math.min(W, H) * 0.1;
-  const alpha = BRIGHTNESS.base + visualBrightness * (1 - BRIGHTNESS.base);
-
-  // Glow underneath, brightest when active.
-  if (visualBrightness > 0.05) {
-    const glow = ctx.createRadialGradient(dot.x, dot.y, radius, dot.x, dot.y, radius * 2.2);
-    glow.addColorStop(0, withAlpha(myColor, visualBrightness * 0.45));
-    glow.addColorStop(1, withAlpha(myColor, 0));
-    ctx.fillStyle = glow;
-    ctx.beginPath();
-    ctx.arc(dot.x, dot.y, radius * 2.2, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  ctx.fillStyle = withAlpha(myColor, alpha);
-  ctx.beginPath();
-  ctx.arc(dot.x, dot.y, radius, 0, Math.PI * 2);
-  ctx.fill();
 
   requestAnimationFrame(render);
-}
-
-function withAlpha(hex, a) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${a})`;
 }

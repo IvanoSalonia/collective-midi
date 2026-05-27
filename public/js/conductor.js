@@ -3,10 +3,14 @@
 // 1. Connects as 'conductor', receives groupCount/colors/roster/settings.
 // 2. WebMIDI: lets the user pick a MIDI input, forwards note events to the server.
 // 3. Renders the group overview (audience counts, flash on note).
-// 4. Renders the sound-design panel and pushes 'settings-update' patches when the
-//    user changes any control or drops a sample.
-// 5. Rehearsal mode: when toggled, instantiates a local audio stack on the laptop
-//    and plays every channel's note locally (regardless of group routing).
+// 4. Renders the sound-design panel with A/B/C tabs per channel. Sliders
+//    read/write whichever state's tab is currently selected for that channel.
+//    Settings patches are wrapped as { channels: [{ <state>: {field: value} }] }.
+// 5. Rehearsal mode: when toggled, instantiates a local audio stack on the
+//    laptop. Each channel's currently-selected tab determines which state
+//    that channel plays through, so the user can audition sound design
+//    changes per orientation.
+// 6. Step sequencer (in sequencer.js) shares the same socket + local stack.
 
 import { createAudioStack } from '/js/audio/audio-stack.js';
 import { createSequencer } from '/js/sequencer.js';
@@ -26,7 +30,6 @@ const groupsEl = document.getElementById('groups');
 const logEl = document.getElementById('log');
 const midiSelectEl = document.getElementById('midi-input');
 const rehearsalToggleEl = document.getElementById('rehearsal-toggle');
-const sdPanelEl = document.getElementById('sd-panel');
 const bpmInputEl = document.getElementById('bpm-input');
 const delayStepEl = document.getElementById('delay-step');
 const delayFeedbackEl = document.getElementById('delay-feedback');
@@ -36,30 +39,21 @@ let groupCells = [];
 let groupColors = [];
 const chCells = [...document.querySelectorAll('.ch-meter .ch')];
 
-// Active-note counters per group / per channel. The visual indicator stays
-// lit for the full duration a note is held (rather than a brief flash) by
-// toggling the class based on whether the count is > 0.
-//   - Groups: incremented on 'note-echo' kind=on, decremented on kind=off.
-//   - Channels: incremented on local note-on, decremented on local note-off.
-// Brief programmatic flashes (e.g. sequencer beat indication) go through
-// the legacy flashChannel() wrapper, which now also feeds the counter so
-// it composes correctly with a held MIDI note.
+// Active-note counters per group / per channel (visual stays lit while count > 0).
 const groupActiveCount = [];
 const chActiveCount = [0, 0, 0, 0];
 
-// Local copy of server settings, used to populate UI on first load and when
-// the server pushes updates. We avoid echoing our own changes back to the UI
-// while the user is dragging a slider (suppressApply guard).
+// Which orientation state ('A'|'B'|'C') is currently shown/edited for each
+// channel. Defaults to A. Also drives the local rehearsal stack: each
+// channel plays the sound of its currently-selected tab.
+const selectedState = ['A', 'A', 'A', 'A'];
+
 let currentSettings = null;
 let suppressApply = false;
-// Last sample URLs we've handed to the local rehearsal stack. We only
-// re-fetch + re-decode when the URL actually changes (the server re-broadcasts
-// the full settings on every slider tick — without this guard we'd thrash
-// the audio context with one decode per tick).
 let appliedLocalSamples = { ch2: null, ch4: null };
 
 // --- Local audio stack (for rehearsal mode) ------------------------------
-// Built lazily on the first user gesture (browser autoplay policy).
+
 let localAudioCtx = null;
 let localStack = null;
 
@@ -75,6 +69,8 @@ async function ensureLocalStack() {
     localStack = createAudioStack(localAudioCtx, currentSettings);
     appliedLocalSamples.ch2 = currentSettings.samples.ch2;
     appliedLocalSamples.ch4 = currentSettings.samples.ch4;
+    // Pin each channel to its currently-selected tab.
+    for (let i = 0; i < 4; i++) localStack.setChannelState(i, selectedState[i]);
     appendLog(`local audio ready (state: ${localAudioCtx.state})`);
     return localStack;
   } catch (e) {
@@ -101,7 +97,10 @@ socket.on('conductor-ready', ({ groupCount, colors, roster, settings }) => {
   applyRoster(roster);
   currentSettings = settings;
   populateSettingsUI(settings);
-  if (localStack) localStack.applySettings(settings);
+  if (localStack) {
+    localStack.applySettings(settings);
+    for (let i = 0; i < 4; i++) localStack.setChannelState(i, selectedState[i]);
+  }
 });
 
 socket.on('settings', (settings) => {
@@ -109,6 +108,9 @@ socket.on('settings', (settings) => {
   populateSettingsUI(settings);
   if (localStack) {
     localStack.applySettings(settings);
+    // Re-apply each channel's selected state — engine settings would
+    // otherwise be stale after applySettings rebuilds the FX bus snapshot.
+    for (let i = 0; i < 4; i++) localStack.setChannelState(i, selectedState[i]);
     if (settings.samples.ch2 !== appliedLocalSamples.ch2) {
       localStack.reloadSample(1, settings.samples.ch2).catch(() => {});
       appliedLocalSamples.ch2 = settings.samples.ch2;
@@ -155,9 +157,6 @@ function buildGroupGrid(n, colors) {
   }
 }
 
-// Count-based: class is on while count > 0, off when count drops to 0.
-// CSS transitions smooth the on/off so very brief notes still produce a
-// visible pulse.
 function setGroupActive(idx, on) {
   groupActiveCount[idx] = groupActiveCount[idx] || 0;
   if (on) groupActiveCount[idx]++;
@@ -177,10 +176,7 @@ function setChannelActive(ch, on) {
   else cell.classList.remove('active');
 }
 
-// Backward-compatible brief-pulse helper. Used by the sequencer to indicate
-// a step beat. Implemented on top of the counter so it composes cleanly
-// with a sustained MIDI note (the held note keeps the count above zero
-// even after this transient decrement).
+// Backward-compatible brief-pulse helper used by the sequencer.
 function flashChannel(ch) {
   setChannelActive(ch, true);
   setTimeout(() => setChannelActive(ch, false), 140);
@@ -196,29 +192,29 @@ function appendLog(text) {
 
 // --- Sound-design panel: bind UI <-> settings -----------------------------
 
-// Push a partial settings patch to the server.
 function pushSettings(patch) {
   if (suppressApply) return;
   socket.emit('settings-update', patch);
 }
 
-// Build the channels[] array for a single-channel patch.
-function channelPatch(ch, fields) {
+// Wrap a single channel's field changes in the right orientation state.
+//   channelStatePatch(2, 'B', { reverbSend: 0.5 })
+//     → { channels: [undef, undef, { B: { reverbSend: 0.5 } }, undef] }
+function channelStatePatch(ch, stateKey, fields) {
   const arr = [];
-  for (let i = 0; i < 4; i++) arr.push(i === ch ? fields : undefined);
+  for (let i = 0; i < 4; i++) arr.push(i === ch ? { [stateKey]: fields } : undefined);
   return { channels: arr };
 }
 
-// Don't overwrite the value of the input the user is currently interacting
-// with — otherwise dragging a slider fights with the echo-back from the
-// server and feels frozen.
 function setIfNotActive(el, value) {
   if (document.activeElement === el) return;
   el.value = value;
 }
 
-// Read incoming settings and reflect them into the UI controls.
+// Reflect settings into the FX bus controls + each strip's currently-selected
+// state. Filename labels read from the top-level samples object.
 function populateSettingsUI(s) {
+  if (!s) return;
   suppressApply = true;
   setIfNotActive(bpmInputEl, s.bpm);
   setIfNotActive(delayStepEl, s.delay.step);
@@ -226,27 +222,34 @@ function populateSettingsUI(s) {
   setIfNotActive(reverbWetEl, s.reverb.wet);
   document.querySelectorAll('.sd-strip').forEach((stripEl) => {
     const ch = Number(stripEl.dataset.ch);
-    const c = s.channels[ch];
-    if (!c) return;
-    stripEl.querySelectorAll('[data-bind]').forEach((el) => {
-      const key = el.dataset.bind;
-      if (key === 'filename') {
-        const url = ch === 1 ? s.samples.ch2 : ch === 3 ? s.samples.ch4 : null;
-        if (url) el.textContent = url.split('/').pop().split('?')[0];
-        return;
-      }
-      if (c[key] === undefined) return;
-      if (el.type === 'checkbox') {
-        if (document.activeElement !== el) el.checked = !!c[key];
-      } else if (el.tagName === 'SELECT' || el.type === 'range' || el.type === 'number') {
-        setIfNotActive(el, c[key]);
-      }
-    });
+    populateStripState(stripEl, ch, selectedState[ch]);
   });
   suppressApply = false;
 }
 
-// Wire FX bus + BPM controls.
+function populateStripState(stripEl, ch, stateKey) {
+  if (!currentSettings) return;
+  const channel = currentSettings.channels[ch];
+  if (!channel) return;
+  const state = channel[stateKey];
+  if (!state) return;
+  stripEl.querySelectorAll('[data-bind]').forEach((el) => {
+    const key = el.dataset.bind;
+    if (key === 'filename') {
+      const url = ch === 1 ? currentSettings.samples.ch2 : ch === 3 ? currentSettings.samples.ch4 : null;
+      if (url) el.textContent = url.split('/').pop().split('?')[0];
+      return;
+    }
+    if (state[key] === undefined) return;
+    if (el.type === 'checkbox') {
+      if (document.activeElement !== el) el.checked = !!state[key];
+    } else if (el.tagName === 'SELECT' || el.type === 'range' || el.type === 'number') {
+      setIfNotActive(el, state[key]);
+    }
+  });
+}
+
+// FX bus + BPM controls.
 bpmInputEl.addEventListener('input', () => {
   const bpm = Number(bpmInputEl.value);
   if (!Number.isFinite(bpm)) return;
@@ -256,9 +259,25 @@ delayStepEl.addEventListener('change', () => pushSettings({ delay: { step: delay
 delayFeedbackEl.addEventListener('input', () => pushSettings({ delay: { feedback: Number(delayFeedbackEl.value) } }));
 reverbWetEl.addEventListener('input', () => pushSettings({ reverb: { wet: Number(reverbWetEl.value) } }));
 
-// Wire each channel strip's controls.
+// Wire each strip's sliders + A/B/C tabs.
 document.querySelectorAll('.sd-strip').forEach((stripEl) => {
   const ch = Number(stripEl.dataset.ch);
+
+  // Tab switching — change which state's params are visible/editable.
+  stripEl.querySelectorAll('.sd-tab').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const newState = btn.dataset.state;
+      selectedState[ch] = newState;
+      stripEl.querySelectorAll('.sd-tab').forEach((b) =>
+        b.classList.toggle('active', b === btn));
+      populateStripState(stripEl, ch, newState);
+      // Update local stack so the user can hear changes in the new state
+      // if rehearsal is on.
+      if (localStack) localStack.setChannelState(ch, newState);
+    });
+  });
+
+  // Sliders / selects / checkboxes — push wrapped in the currently-selected state.
   stripEl.querySelectorAll('[data-bind]').forEach((el) => {
     const key = el.dataset.bind;
     if (key === 'filename') return; // display only
@@ -268,7 +287,7 @@ document.querySelectorAll('.sd-strip').forEach((stripEl) => {
       if (el.type === 'checkbox') value = el.checked;
       else if (el.type === 'range' || el.type === 'number') value = Number(el.value);
       else value = el.value;
-      pushSettings(channelPatch(ch, { [key]: value }));
+      pushSettings(channelStatePatch(ch, selectedState[ch], { [key]: value }));
     });
   });
 });
@@ -297,13 +316,10 @@ document.querySelectorAll('.sd-drop').forEach((drop) => {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || res.statusText);
       appendLog(`uploaded → ${json.url}`);
-      // Server will broadcast 'settings' which updates currentSettings, UI,
-      // and reloads the local stack's sample if rehearsal is on.
     } catch (err) {
       appendLog(`upload failed: ${err.message}`);
     }
   });
-  // Click-to-pick fallback (handy on machines without easy DnD).
   drop.addEventListener('click', () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -324,7 +340,6 @@ rehearsalToggleEl.addEventListener('change', async () => {
   if (rehearsalToggleEl.checked) {
     const stack = await ensureLocalStack();
     if (!stack) {
-      // Settings haven't arrived yet — un-toggle.
       rehearsalToggleEl.checked = false;
       appendLog('rehearsal: waiting for settings');
       return;

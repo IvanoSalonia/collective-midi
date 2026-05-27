@@ -14,11 +14,16 @@ const GROUP_COUNT = CHANNEL_COUNT * GROUPS_PER_CHANNEL; // 4
 const NOTE_MIN = 48; // C3
 const NOTE_MAX = 83; // B5
 
+// Default (state A) color per group. Each channel actually has THREE colors
+// (one per orientation state) defined in default-settings.js; the audience
+// interpolates between them as the phone tilts. These defaults are what the
+// conductor's group cells show and what a freshly joined phone sees before
+// it receives the full settings.
 const GROUP_COLORS = [
-  '#00FF44', // 1 Green   — Ch1 synth voice
-  '#FF6600', // 2 Orange  — Ch2 sampler
-  '#FFCC00', // 3 Yellow  — Ch3 noise/texture
-  '#FF0000'  // 4 Red     — Ch4 slicer
+  '#42EA33', // CH1 synth voice
+  '#DD1414', // CH2 sampler
+  '#FFFFFF', // CH3 FM synth
+  '#1417DD'  // CH4 slicer
 ];
 
 // noteMap[channel][note] = globalGroupIndex (0..3).

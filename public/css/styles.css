@@ -22,10 +22,26 @@ body.audience {
   touch-action: none;
 }
 
-#stage {
+/* Full-screen color fill on the audience phone. Black by default; JS sets
+   background-color to the current interpolated channel color and toggles
+   .lit to reveal/hide:
+     - On note-on: .lit added → opacity snaps to 1 instantly.
+     - On last note-off: .lit removed → opacity transitions to 0 over 0.2s
+       (revealing the black body underneath).
+   Color updates continuously while .lit is active so the audience sees the
+   crossfade as they tilt. */
+#color-fill {
   position: fixed;
   inset: 0;
-  display: block;
+  background-color: #000;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 1;
+  pointer-events: none;
+}
+#color-fill.lit {
+  opacity: 1;
+  transition: opacity 0s;
 }
 
 /* iPhone-only "Add to Home Screen" prompt — shown after the start tap when
@@ -307,6 +323,34 @@ body.conductor {
   color: #ccc;
   text-transform: uppercase;
   letter-spacing: 0.06em;
+}
+
+/* A/B/C orientation tabs inside each strip header. The active tab uses the
+   channel's color (--c, inherited from the strip-head's inline style). */
+.sd-tabs {
+  display: flex;
+  gap: 0.15rem;
+  margin-left: auto;
+}
+.sd-tab {
+  background: #111;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  color: #888;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.18rem 0.4rem;
+  cursor: pointer;
+  font-family: inherit;
+  letter-spacing: 0.05em;
+  transition: background 0.1s ease, color 0.1s ease, border-color 0.1s ease;
+}
+.sd-tab:hover { color: #ddd; border-color: #3a3a3a; }
+.sd-tab.active {
+  background: var(--c, #444);
+  border-color: var(--c, #444);
+  color: #000;
+  font-weight: 700;
 }
 
 /* Grouped sections inside a strip — small label + indented rows so the eye
