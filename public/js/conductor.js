@@ -305,7 +305,7 @@ rehearsalToggleEl.addEventListener('change', async () => {
       appendLog('rehearsal: waiting for settings');
       return;
     }
-    appendLog('rehearsal mode: on (all 8 groups locally)');
+    appendLog('rehearsal mode: on (all channels locally)');
   } else {
     appendLog('rehearsal mode: off');
   }
