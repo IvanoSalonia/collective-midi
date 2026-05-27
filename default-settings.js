@@ -38,17 +38,16 @@ const DEFAULT_SETTINGS = {
       reverbSend: 0.0,
       delaySend: 0.0
     },
-    // ch3 — noise/texture
+    // ch3 — 2-op FM synth (Volca FM inspired character)
     {
-      noise: 'white',           // 'white' | 'pink' | 'brown'
-      filterType: 'lowpass',    // 'lowpass' | 'bandpass'
-      cutoff: 800,
-      lfoRate: 4,
-      lfoDepth: 0,
-      attack: 0.04,
-      decay: 0.4,
-      sustain: 0.6,
-      release: 0.5,
+      ratio: 2,           // modulator freq / carrier freq
+      modIndex: 3,        // dimensionless; peak Hz deviation = modIndex * modFreq
+      lfoRate: 3,         // Hz, LFO modulating the mod index
+      lfoDepth: 0.5,      // adds ± this much to the index, scaled by modFreq
+      attack: 0.005,
+      decay: 0.3,
+      sustain: 0.2,
+      release: 0.3,
       reverbSend: 0.0,
       delaySend: 0.0
     },

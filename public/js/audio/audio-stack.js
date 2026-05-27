@@ -6,7 +6,7 @@
 
 import { Ch1Voice } from '/js/audio/ch1-voice.js';
 import { Ch2Sample } from '/js/audio/ch2-sample.js';
-import { Ch3Noise } from '/js/audio/ch3-noise.js';
+import { Ch3FM } from '/js/audio/ch3-fm.js';
 import { Ch4Slicer } from '/js/audio/ch4-slicer.js';
 import { FXBus, ChannelStrip } from '/js/audio/fx-bus.js';
 
@@ -37,7 +37,7 @@ export function createAudioStack(ctx, settings) {
   }
   engines.push(new Ch1Voice(ctx, strips[0].input, settings.channels[0]));
   engines.push(new Ch2Sample(ctx, strips[1].input));
-  engines.push(new Ch3Noise(ctx, strips[2].input, settings.channels[2]));
+  engines.push(new Ch3FM(ctx, strips[2].input, settings.channels[2]));
   engines.push(new Ch4Slicer(ctx, strips[3].input));
 
   // Apply initial settings (sends, FX params).
