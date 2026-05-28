@@ -41,22 +41,23 @@ let smoothedGamma = 90;  // low-pass smoothed for stable interpolation
 // without feeling sluggish.
 const GAMMA_LERP = 0.1;
 
-// Explicit angle → orientation-weight breakpoints (left/right tilt via gamma).
-// Per the spec:
-//   A (portrait) ≈ 90°, pure A across 55..90
-//   A→B crossfade between 55° (A) and 35° (B)
-//   A→C crossfade between -55° (A) and -35° (C)
-// Weights interpolate linearly between adjacent breakpoints. The middle band
-// (-35..35) is a B↔C crossfade (not separately specified; this is the
-// continuous fill between "full B at 35" and "full C at -35"). Tweak the
-// numbers here to retune.
+// Explicit angle → orientation-weight breakpoints. The device rolls across
+// the gamma axis A (high +) → B (middle) → C (low -), with hold zones so a
+// state stays put once reached:
+//   90..55  : pure A (portrait rest)
+//   55..35  : A → B crossfade
+//   35..0   : hold B  (0° reads as B)
+//   0..-35  : B → C crossfade
+//   -35..-90: hold C  (stays C — no reverting to A at extreme tilt)
+// Weights interpolate linearly between adjacent breakpoints. Same table for
+// all 4 channels. Tweak these numbers to retune the tilt response.
 const ORIENTATION_BREAKPOINTS = [
   { g:  90, A: 1, B: 0, C: 0 },
   { g:  55, A: 1, B: 0, C: 0 },
   { g:  35, A: 0, B: 1, C: 0 },
+  { g:   0, A: 0, B: 1, C: 0 },
   { g: -35, A: 0, B: 0, C: 1 },
-  { g: -55, A: 1, B: 0, C: 0 },
-  { g: -90, A: 1, B: 0, C: 0 }
+  { g: -90, A: 0, B: 0, C: 1 }
 ];
 
 function weightsFromGamma(g) {
