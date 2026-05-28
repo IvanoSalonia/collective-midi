@@ -7,14 +7,15 @@
 //
 // Audio + color reactivity: each channel has THREE orientation states
 // (A/B/C) of sound design + color. The device's DeviceOrientationEvent
-// gamma drives an A/B/C weight vector; as the phone tilts, the weights
-// blend smoothly, and both the audio engine settings and the fill color
-// update in real time.
+// gamma (left/right tilt) drives an A/B/C weight vector via an explicit
+// breakpoint table (see ORIENTATION_BREAKPOINTS); both the audio engine
+// settings and the fill color blend smoothly as the phone tilts.
 //
-//   gamma ≈   0  → 100% A  (portrait, no tilt)
-//   gamma ≈ +90  → 100% B  (right edge down — "landscape right")
-//   gamma ≈ -90  → 100% C  (left edge down — "landscape left")
-//   in between  → linear blend across A↔B or A↔C
+//   gamma 55..90  → pure A (portrait)
+//   gamma 55→35   → A crossfades to B
+//   gamma -55→-35 → A crossfades to C
+//
+// The raw gamma is low-passed (GAMMA_LERP) to remove sensor jitter.
 
 import { createAudioStack } from '/js/audio/audio-stack.js';
 
@@ -32,8 +33,50 @@ let activeNotes = 0;
 // Orientation weights (sum to 1). Default to A.
 let weights = { A: 1, B: 0, C: 0 };
 
-let rawGamma = 0;        // latest DeviceOrientation gamma
-let smoothedGamma = 0;   // smoothed for stable interpolation
+let rawGamma = 90;       // latest DeviceOrientation gamma (default to portrait/A)
+let smoothedGamma = 90;  // low-pass smoothed for stable interpolation
+
+// Low-pass factor for the gamma input — each frame moves this fraction toward
+// the raw reading. Lower = smoother but laggier. 0.1 kills sensor jitter
+// without feeling sluggish.
+const GAMMA_LERP = 0.1;
+
+// Explicit angle → orientation-weight breakpoints (left/right tilt via gamma).
+// Per the spec:
+//   A (portrait) ≈ 90°, pure A across 55..90
+//   A→B crossfade between 55° (A) and 35° (B)
+//   A→C crossfade between -55° (A) and -35° (C)
+// Weights interpolate linearly between adjacent breakpoints. The middle band
+// (-35..35) is a B↔C crossfade (not separately specified; this is the
+// continuous fill between "full B at 35" and "full C at -35"). Tweak the
+// numbers here to retune.
+const ORIENTATION_BREAKPOINTS = [
+  { g:  90, A: 1, B: 0, C: 0 },
+  { g:  55, A: 1, B: 0, C: 0 },
+  { g:  35, A: 0, B: 1, C: 0 },
+  { g: -35, A: 0, B: 0, C: 1 },
+  { g: -55, A: 1, B: 0, C: 0 },
+  { g: -90, A: 1, B: 0, C: 0 }
+];
+
+function weightsFromGamma(g) {
+  const bp = ORIENTATION_BREAKPOINTS;
+  if (g >= bp[0].g) return { A: bp[0].A, B: bp[0].B, C: bp[0].C };
+  const last = bp[bp.length - 1];
+  if (g <= last.g) return { A: last.A, B: last.B, C: last.C };
+  for (let i = 0; i < bp.length - 1; i++) {
+    const hi = bp[i], lo = bp[i + 1];
+    if (g <= hi.g && g >= lo.g) {
+      const t = (hi.g - g) / (hi.g - lo.g); // 0 at hi, 1 at lo
+      return {
+        A: hi.A + (lo.A - hi.A) * t,
+        B: hi.B + (lo.B - hi.B) * t,
+        C: hi.C + (lo.C - hi.C) * t
+      };
+    }
+  }
+  return { A: 1, B: 0, C: 0 };
+}
 
 // Shake-to-mute state. Audio is muted locally (master gain ramped to 0);
 // previousMasterGain holds the value we restore on tap. The overlay button
@@ -238,15 +281,9 @@ function maybeShowAddToHomeScreenPrompt() {
 // --- Render loop --------------------------------------------------------
 
 function render() {
-  // Smooth gamma so the blend doesn't jitter from sensor noise.
-  smoothedGamma += (rawGamma - smoothedGamma) * 0.08;
-
-  const g = Math.max(-90, Math.min(90, smoothedGamma));
-  const wA = Math.max(0, 1 - Math.abs(g) / 90);
-  const wB = Math.max(0, g / 90);
-  const wC = Math.max(0, -g / 90);
-  const sum = wA + wB + wC || 1;
-  weights = { A: wA / sum, B: wB / sum, C: wC / sum };
+  // Low-pass the raw gamma, then map through the explicit breakpoint table.
+  smoothedGamma += (rawGamma - smoothedGamma) * GAMMA_LERP;
+  weights = weightsFromGamma(smoothedGamma);
 
   if (stack) {
     stack.setOrientation(weights);
