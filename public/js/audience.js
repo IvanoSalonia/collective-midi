@@ -153,6 +153,14 @@ overlay.addEventListener('click', async () => {
 }, { once: true });
 
 async function startEverything() {
+  // CRITICAL: request sensor permission FIRST, before any other await.
+  // iOS only honors DeviceOrientation/DeviceMotion requestPermission() while
+  // the tap's transient activation is live. Awaiting fullscreen / audio /
+  // settings beforehand spends that activation, so requestPermission() then
+  // rejects with no prompt and the listeners never attach — which is exactly
+  // what froze gamma at its default. Doing it first keeps the gesture valid.
+  await requestSensorPermissions();
+
   // Fullscreen — works on Android/iPad/desktop. iPhone Safari throws (no
   // fullscreen API for arbitrary pages), caught and ignored.
   try {
@@ -170,33 +178,36 @@ async function startEverything() {
   appliedSamples.ch4 = settings.samples.ch4;
   stack.setOrientation(weights);
 
-  // iOS 13+: must request DeviceOrientation and DeviceMotion permission
-  // from a user gesture. Orientation drives the A/B/C interpolation;
-  // motion drives shake-to-mute detection.
-  if (typeof DeviceOrientationEvent !== 'undefined' &&
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
-    try {
-      const r = await DeviceOrientationEvent.requestPermission();
-      if (r === 'granted') window.addEventListener('deviceorientation', onOrientation);
-    } catch (e) { console.warn('orientation permission denied:', e); }
-    if (typeof DeviceMotionEvent?.requestPermission === 'function') {
-      try {
-        const r = await DeviceMotionEvent.requestPermission();
-        if (r === 'granted') window.addEventListener('devicemotion', onMotion);
-      } catch (e) { console.warn('motion permission denied:', e); }
-    } else {
-      window.addEventListener('devicemotion', onMotion);
-    }
-  } else {
-    window.addEventListener('deviceorientation', onOrientation);
-    window.addEventListener('devicemotion', onMotion);
-  }
-
   muteReactivateEl?.addEventListener('click', reactivate);
 
   await requestWakeLock();
   maybeShowAddToHomeScreenPrompt();
   requestAnimationFrame(render);
+}
+
+// Orientation drives the A/B/C color/sound interpolation; motion drives
+// shake-to-mute. On iOS 13+ both are gated behind requestPermission(), which
+// must run inside the tap gesture — hence this is the first thing called.
+async function requestSensorPermissions() {
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const r = await DeviceOrientationEvent.requestPermission();
+      if (r === 'granted') window.addEventListener('deviceorientation', onOrientation);
+    } catch (e) { console.warn('orientation permission:', e); }
+  } else {
+    window.addEventListener('deviceorientation', onOrientation);
+  }
+
+  if (typeof DeviceMotionEvent !== 'undefined' &&
+      typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const r = await DeviceMotionEvent.requestPermission();
+      if (r === 'granted') window.addEventListener('devicemotion', onMotion);
+    } catch (e) { console.warn('motion permission:', e); }
+  } else {
+    window.addEventListener('devicemotion', onMotion);
+  }
 }
 
 function waitForSettings() {
