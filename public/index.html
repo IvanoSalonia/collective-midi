@@ -28,6 +28,13 @@
        interpolated channel color; toggling .lit fades opacity. -->
   <div id="color-fill"></div>
 
+  <!-- Top-right HUD: subtle group number (always visible after join) plus a
+       small gamma/state readout used for calibrating the tilt thresholds. -->
+  <div class="hud">
+    <div id="group-badge" class="hud-group"></div>
+    <div id="gamma-readout" class="hud-debug"></div>
+  </div>
+
   <!-- Shake-to-mute overlay. Hidden until the audience shakes their phone;
        tapping the button restores audio. Local to this phone only. -->
   <div id="mute-overlay" class="mute-overlay hidden">

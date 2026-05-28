@@ -44,6 +44,28 @@ body.audience {
   transition: opacity 0s;
 }
 
+/* Top-right HUD on the audience phone: subtle group number + small gamma
+   readout. Sits above the color fill so it stays visible during notes. */
+.hud {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 0.5rem);
+  right: 0.7rem;
+  z-index: 15;
+  text-align: right;
+  pointer-events: none;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.hud-group {
+  font-size: 0.72rem;
+  color: #777;
+  letter-spacing: 0.05em;
+}
+.hud-debug {
+  font-size: 0.6rem;
+  color: #555;
+  margin-top: 0.15rem;
+}
+
 /* Shake-to-mute overlay. Sits above the color fill (z-index 20 vs 1).
    Semi-transparent so the audience can still glimpse the color firing
    underneath if they want, but the focus is the reactivate button. */

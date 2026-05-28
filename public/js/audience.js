@@ -87,6 +87,8 @@ let previousMasterGain = 0.7;
 const fillEl = document.getElementById('color-fill');
 const muteOverlayEl = document.getElementById('mute-overlay');
 const muteReactivateEl = document.getElementById('mute-reactivate');
+const groupBadgeEl = document.getElementById('group-badge');
+const gammaReadoutEl = document.getElementById('gamma-readout');
 
 // --- Socket wiring -------------------------------------------------------
 
@@ -98,6 +100,7 @@ socket.on('assigned', ({ group, color, settings }) => {
   document.documentElement.style.setProperty('--group-color', color);
   const sub = document.getElementById('start-sub');
   if (sub) sub.textContent = `Group ${group + 1}`;
+  if (groupBadgeEl) groupBadgeEl.textContent = `Group ${group + 1}`;
 });
 
 socket.on('settings', (settings) => {
@@ -292,6 +295,13 @@ function render() {
     if (activeNotes > 0 && myGroup !== null) {
       fillEl.style.backgroundColor = stack.getInterpolatedColor(myGroup, weights);
     }
+  }
+
+  // Calibration readout: live gamma + dominant orientation state.
+  if (gammaReadoutEl) {
+    const dom = weights.A >= weights.B && weights.A >= weights.C
+      ? 'A' : (weights.B >= weights.C ? 'B' : 'C');
+    gammaReadoutEl.textContent = `γ ${Math.round(smoothedGamma)}° · ${dom}`;
   }
 
   requestAnimationFrame(render);
