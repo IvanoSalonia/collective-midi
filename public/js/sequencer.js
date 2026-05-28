@@ -10,14 +10,28 @@ function noteName(midi) {
   return `${NOTE_NAMES[midi % 12]}${Math.floor(midi / 12) - 1}`;
 }
 
-const CH_COLORS = ['#FF0000', '#00FF44', '#0066FF', '#FF00AA'];
+// Channel colors — must match the per-channel group colors (default/state A)
+// in default-settings.js and note-mapping.js.
+const CH_COLORS = ['#42EA33', '#DD1414', '#FFFFFF', '#1417DD'];
 const NUM_STEPS = 16;
 const NUM_CHANNELS = 4;
 const MAX_NOTES_PER_STEP = 3;
-const KEYBOARD_OCTAVES = 2;
+// Keyboard shows 1.5 octaves = 11 white keys (C up to F an octave-and-a-half
+// higher). The octave arrows shift this window across the C3..B5 range.
+const KEYBOARD_WHITE_KEYS = 11;
 const NOTE_MIN = 48; // C3, start of the routable range (see note-mapping.js)
 const NOTE_MAX = 83; // B5
 const DEFAULT_KEYBOARD_BASE = 48;
+
+// Semitone offset (within an octave) of each successive white key, and a
+// helper to get the semitone offset of the i-th white key from a base C.
+const WHITE_OFFSETS = [0, 2, 4, 5, 7, 9, 11];
+function whiteKeyOffset(i) {
+  return Math.floor(i / 7) * 12 + WHITE_OFFSETS[i % 7];
+}
+// Semitone offsets of white notes that have a black key immediately above:
+// C, D, F, G, A.
+const HAS_SHARP_AFTER = new Set([0, 2, 5, 7, 9]);
 
 export function createSequencer({
   socket,
@@ -98,46 +112,43 @@ export function createSequencer({
     const wrapper = document.createElement('div');
     wrapper.className = 'seq-keys';
 
-    const numWhite = 7 * KEYBOARD_OCTAVES;
-    const whitePct = 100 / numWhite;
+    const whitePct = 100 / KEYBOARD_WHITE_KEYS;
     const blackPct = whitePct * 0.6;
-    const whiteSemitones = [0, 2, 4, 5, 7, 9, 11];
-    const blackSemitones = [1, 3, 6, 8, 10];
-    // For each black key in an octave: which white-key index it sits AFTER.
-    const blackAfterWhite = [0, 1, 3, 4, 5];
 
-    for (let oct = 0; oct < KEYBOARD_OCTAVES; oct++) {
-      for (let i = 0; i < 7; i++) {
-        const midi = keyboardBase + oct * 12 + whiteSemitones[i];
-        const w = document.createElement('button');
-        w.className = 'seq-key seq-key-white';
-        w.dataset.note = midi;
-        w.title = noteName(midi);
-        if (whiteSemitones[i] === 0) {
-          const label = document.createElement('span');
-          label.className = 'seq-key-label';
-          label.textContent = `C${Math.floor(midi / 12) - 1}`;
-          w.appendChild(label);
-        }
-        w.addEventListener('click', () => selectNote(midi));
-        wrapper.appendChild(w);
+    // White keys (flex row). Every C gets an octave label.
+    const whiteMidis = [];
+    for (let i = 0; i < KEYBOARD_WHITE_KEYS; i++) {
+      const midi = keyboardBase + whiteKeyOffset(i);
+      whiteMidis.push(midi);
+      const w = document.createElement('button');
+      w.className = 'seq-key seq-key-white';
+      w.dataset.note = midi;
+      w.title = noteName(midi);
+      if (midi % 12 === 0) {
+        const label = document.createElement('span');
+        label.className = 'seq-key-label';
+        label.textContent = `C${Math.floor(midi / 12) - 1}`;
+        w.appendChild(label);
       }
+      w.addEventListener('click', () => selectNote(midi));
+      wrapper.appendChild(w);
     }
 
-    // Black keys, absolutely positioned over the white-key boundaries.
-    for (let oct = 0; oct < KEYBOARD_OCTAVES; oct++) {
-      for (let i = 0; i < blackSemitones.length; i++) {
-        const midi = keyboardBase + oct * 12 + blackSemitones[i];
-        const b = document.createElement('button');
-        b.className = 'seq-key seq-key-black';
-        b.dataset.note = midi;
-        b.title = noteName(midi);
-        const idx = oct * 7 + blackAfterWhite[i];
-        b.style.left = `${(idx + 1) * whitePct - blackPct / 2}%`;
-        b.style.width = `${blackPct}%`;
-        b.addEventListener('click', (e) => { e.stopPropagation(); selectNote(midi); });
-        wrapper.appendChild(b);
-      }
+    // Black keys sit between consecutive white keys where the lower white
+    // note has a sharp above it. The trailing position past the last white
+    // key is skipped so we don't render a half-off black key at the edge.
+    for (let i = 0; i < KEYBOARD_WHITE_KEYS - 1; i++) {
+      const noteInOct = ((whiteMidis[i] % 12) + 12) % 12;
+      if (!HAS_SHARP_AFTER.has(noteInOct)) continue;
+      const blackMidi = whiteMidis[i] + 1;
+      const b = document.createElement('button');
+      b.className = 'seq-key seq-key-black';
+      b.dataset.note = blackMidi;
+      b.title = noteName(blackMidi);
+      b.style.left = `${(i + 1) * whitePct - blackPct / 2}%`;
+      b.style.width = `${blackPct}%`;
+      b.addEventListener('click', (e) => { e.stopPropagation(); selectNote(blackMidi); });
+      wrapper.appendChild(b);
     }
 
     keyboardEl.appendChild(wrapper);
@@ -167,7 +178,8 @@ export function createSequencer({
 
   function shiftOctave(delta) {
     const lowest = NOTE_MIN;
-    const highest = NOTE_MAX - KEYBOARD_OCTAVES * 12 + 1;
+    // Keep the highest white key within the routable range.
+    const highest = NOTE_MAX - whiteKeyOffset(KEYBOARD_WHITE_KEYS - 1);
     const next = Math.max(lowest, Math.min(highest, keyboardBase + delta));
     if (next === keyboardBase) return;
     keyboardBase = next;
