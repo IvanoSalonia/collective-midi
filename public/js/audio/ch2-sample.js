@@ -1,8 +1,8 @@
 // Channel 2 — general-purpose sampler.
 //
 // One user-supplied sample, C4 reference pitch. Each note plays the sample
-// at a playbackRate computed from (note + transpose − C4). User controls:
-// volume, transpose (semitones), and full ADSR.
+// at a playbackRate computed from (note − C4), through a low-pass filter.
+// User controls: volume, low-pass cutoff, and full ADSR.
 
 const REFERENCE_NOTE = 60; // C4
 
@@ -29,12 +29,17 @@ export class Ch2Sample {
     const t = this.ctx.currentTime;
     const v = Math.min(1, velocity / 127);
     const volume = Math.max(0, Math.min(1, this.s.volume ?? 0.6));
-    const transpose = this.s.transpose ?? 0;
     const peak = volume * v;
 
     const source = this.ctx.createBufferSource();
     source.buffer = this.buffer;
-    source.playbackRate.value = Math.pow(2, (note + transpose - REFERENCE_NOTE) / 12);
+    source.playbackRate.value = Math.pow(2, (note - REFERENCE_NOTE) / 12);
+
+    // Low-pass filter (replaces the old transpose control).
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = Math.max(80, Math.min(8000, this.s.cutoff ?? 8000));
+    filter.Q.value = 1;
 
     const amp = this.ctx.createGain();
     const a = Math.max(0.001, this.s.attack ?? 0.02);
@@ -44,7 +49,7 @@ export class Ch2Sample {
     amp.gain.linearRampToValueAtTime(peak, t + a);
     amp.gain.linearRampToValueAtTime(peak * sustainLevel, t + a + d);
 
-    source.connect(amp).connect(this.destination);
+    source.connect(filter).connect(amp).connect(this.destination);
     source.start(t);
 
     const existing = this.voices.get(note);
@@ -52,7 +57,7 @@ export class Ch2Sample {
     this.voices.set(note, { source, amp, stopped: false });
 
     source.onended = () => {
-      try { source.disconnect(); amp.disconnect(); } catch {}
+      try { source.disconnect(); filter.disconnect(); amp.disconnect(); } catch {}
       const cur = this.voices.get(note);
       if (cur && cur.source === source) this.voices.delete(note);
     };

@@ -78,7 +78,7 @@ const DEFAULT_SETTINGS = {
       A: {
         color: '#DD1414',
         volume: 0.72,
-        transpose: -1,    // (-24..24, 48%)
+        cutoff: 3000,     // Hz, low-pass (replaces transpose)
         attack: 0.08,     // 4%
         decay: 0.97,      // 32%
         sustain: 0.58,
@@ -89,7 +89,7 @@ const DEFAULT_SETTINGS = {
       B: {
         color: '#FF8307',
         volume: 0.95,
-        transpose: 6,     // (62%)
+        cutoff: 6500,     // brighter
         attack: 0.08,
         decay: 1.42,      // 47%
         sustain: 0.68,
@@ -100,7 +100,7 @@ const DEFAULT_SETTINGS = {
       C: {
         color: '#FF07B5',
         volume: 0.88,
-        transpose: -4,    // (42%)
+        cutoff: 1200,     // darker
         attack: 0.08,
         decay: 0.85,      // 28%
         sustain: 0.52,
