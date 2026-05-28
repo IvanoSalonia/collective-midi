@@ -9,3 +9,4 @@ Thumbs.db
 *.tmp.*
 audience-qr.png
 samples/uploaded/
+.claude/

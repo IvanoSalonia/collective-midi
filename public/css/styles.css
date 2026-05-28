@@ -552,12 +552,20 @@ body.conductor {
   color: #d0eed0;
 }
 
+/* Desktop: channels in the left column; steps + keyboard stacked in the
+   right column (keyboard sits under the steps, not under the channels). */
 .seq-grid {
   display: grid;
   grid-template-columns: 70px 1fr;
+  grid-template-areas:
+    "channels steps"
+    ".        keyboard";
   gap: 0.7rem;
   align-items: start;
 }
+.seq-channels { grid-area: channels; }
+.seq-steps { grid-area: steps; min-width: 0; }
+.seq-keyboard-wrap { grid-area: keyboard; min-width: 0; }
 
 .seq-channels {
   display: flex;
@@ -582,13 +590,6 @@ body.conductor {
   color: #000;
   font-weight: 600;
   box-shadow: 0 0 18px -2px var(--ch-color);
-}
-
-.seq-edit {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  min-width: 0;
 }
 
 .seq-steps {
@@ -685,3 +686,26 @@ body.conductor {
 }
 .seq-key-black:hover { background: #333; }
 .seq-key-black.selected { background: #c79b00; border-color: #6a5300; }
+
+/* Mobile sequencer: channels (left) + steps (right) on top; keyboard spans
+   the full width at the bottom and scrolls horizontally. This block lives
+   at the end of the file (after the base .seq-* rules) so its overrides win
+   without needing !important. */
+@media (max-width: 700px) {
+  .seq-grid {
+    grid-template-columns: 56px 1fr;
+    grid-template-areas:
+      "channels steps"
+      "keyboard keyboard";
+  }
+  .seq-keyboard {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Keep keys at a touch-friendly width and scroll instead of shrinking.
+     14 white keys × 44px = 616px content → scrolls on a phone screen. The
+     black keys are positioned as % of .seq-keys width, so they stay aligned. */
+  .seq-keys { width: max-content; min-width: 100%; }
+  .seq-key-white { flex: 0 0 44px; }
+}
