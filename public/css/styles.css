@@ -688,9 +688,8 @@ body.conductor {
 .seq-key-black.selected { background: #c79b00; border-color: #6a5300; }
 
 /* Mobile sequencer: channels (left) + steps (right) on top; keyboard spans
-   the full width at the bottom and scrolls horizontally. This block lives
-   at the end of the file (after the base .seq-* rules) so its overrides win
-   without needing !important. */
+   the full width at the bottom. This block lives at the end of the file
+   (after the base .seq-* rules) so its overrides win without !important. */
 @media (max-width: 700px) {
   .seq-grid {
     grid-template-columns: 56px 1fr;
@@ -698,14 +697,13 @@ body.conductor {
       "channels steps"
       "keyboard keyboard";
   }
-  .seq-keyboard {
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-  }
-  /* Keep keys at a touch-friendly width and scroll instead of shrinking.
-     14 white keys × 44px = 616px content → scrolls on a phone screen. The
-     black keys are positioned as % of .seq-keys width, so they stay aligned. */
-  .seq-keys { width: max-content; min-width: 100%; }
-  .seq-key-white { flex: 0 0 44px; }
+  /* Channel selector spans the full step-grid height; the 4 buttons fill it
+     evenly so Ch1's top aligns with the steps' top and Ch4's bottom aligns
+     with the steps' bottom. min-height:0 lets the buttons collapse so the
+     step grid (not the buttons' natural height) drives the row height, then
+     the stretched column + flex:1 buttons distribute evenly within it. */
+  .seq-channels { align-self: stretch; }
+  .seq-ch { flex: 1; min-height: 0; padding: 0.2rem 0.4rem; font-size: 0.72rem; }
+  /* Keyboard shows the full 2-octave window filling the width (the octave
+     arrows shift the window up/down to reach the rest of the range). */
 }
