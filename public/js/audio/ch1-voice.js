@@ -60,7 +60,8 @@ export class Ch1Voice {
     const t = this.ctx.currentTime;
     const freq = NOTE_TO_HZ(note);
     const v = Math.min(1, velocity / 127);
-    const peak = 0.18 * v;
+    const volume = Math.max(0, Math.min(1, this.s.volume ?? 1));
+    const peak = volume * 0.18 * v;
 
     const osc1 = this.ctx.createOscillator();
     const osc2 = this.ctx.createOscillator();

@@ -29,6 +29,7 @@ const DEFAULT_SETTINGS = {
     {
       A: {
         color: '#42EA33',
+        volume: 1.0,
         osc: 'sine',
         detune: 7.5,      // cents (slider 0..50, 15%)
         cutoff: 3644,     // Hz   (slider 80..8000, 45%)
@@ -43,6 +44,7 @@ const DEFAULT_SETTINGS = {
       },
       B: {
         color: '#02C9DF',
+        volume: 1.0,
         osc: 'sine',
         detune: 0,
         cutoff: 5624,     // 70%
@@ -57,6 +59,7 @@ const DEFAULT_SETTINGS = {
       },
       C: {
         color: '#0739FF',
+        volume: 1.0,
         osc: 'sine',
         detune: 20,       // 40%
         cutoff: 2456,     // 30%
@@ -116,6 +119,7 @@ const DEFAULT_SETTINGS = {
     {
       A: {
         color: '#FFFFFF',
+        volume: 1.0,
         ratio: 10,        // (0.25..16, 62%)
         modIndex: 1.8,    // (0..10, 18%)
         lfoRate: 7.07,    // (0.1..20, 35%)
@@ -129,6 +133,7 @@ const DEFAULT_SETTINGS = {
       },
       B: {
         color: '#A57EE8',
+        volume: 1.0,
         ratio: 11.6,      // 72%
         modIndex: 5.8,    // 58%
         lfoRate: 4.48,    // 22%
@@ -142,6 +147,7 @@ const DEFAULT_SETTINGS = {
       },
       C: {
         color: '#619CD3',
+        volume: 1.0,
         ratio: 6.25,      // 38%
         modIndex: 2.8,    // 28%
         lfoRate: 13.63,   // 68%

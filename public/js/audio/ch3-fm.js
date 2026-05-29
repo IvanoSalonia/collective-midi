@@ -40,7 +40,8 @@ export class Ch3FM {
     const lfoRate = Math.max(0.01, this.s.lfoRate ?? 3);
     const lfoDepth = Math.max(0, this.s.lfoDepth ?? 0);
     const v = Math.min(1, velocity / 127);
-    const peak = 0.22 * v;
+    const volume = Math.max(0, Math.min(1, this.s.volume ?? 1));
+    const peak = volume * 0.22 * v;
 
     // Carrier — the heard tone.
     const carrier = this.ctx.createOscillator();
