@@ -196,7 +196,7 @@ const DEFAULT_SETTINGS = {
   ],
   samples: {
     // Updated by the upload endpoint when the conductor drops a new file.
-    ch2: '/samples/sampler.wav',
+    ch2: '/samples/sampler.mp3',
     ch4: '/samples/ch2-instrument.mp3'
   }
 };
