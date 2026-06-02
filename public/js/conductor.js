@@ -334,6 +334,53 @@ document.querySelectorAll('.sd-drop').forEach((drop) => {
   });
 });
 
+// --- Preset export / import -----------------------------------------------
+// Server settings live in memory and reset to defaults on every Node restart
+// (including Railway redeploys). Export downloads the current settings as
+// JSON; Import applies a JSON file as a settings patch (server deep-merges
+// and broadcasts), so a tuned config survives across deploys.
+
+const presetExportBtn = document.getElementById('preset-export');
+const presetImportBtn = document.getElementById('preset-import');
+const presetImportFile = document.getElementById('preset-import-file');
+
+presetExportBtn?.addEventListener('click', () => {
+  if (!currentSettings) {
+    appendLog('preset export: settings not ready yet');
+    return;
+  }
+  const json = JSON.stringify(currentSettings, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').replace(/T/, '_').slice(0, 19);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `collective-midi-preset-${stamp}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  appendLog(`preset exported: ${a.download}`);
+});
+
+presetImportBtn?.addEventListener('click', () => presetImportFile?.click());
+presetImportFile?.addEventListener('change', async () => {
+  const file = presetImportFile.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('not a settings object');
+    }
+    socket.emit('settings-update', parsed);
+    appendLog(`preset imported: ${file.name}`);
+  } catch (e) {
+    appendLog(`preset import failed: ${e.message}`);
+  }
+  presetImportFile.value = ''; // allow re-importing the same file
+});
+
 // --- Rehearsal toggle -----------------------------------------------------
 
 rehearsalToggleEl.addEventListener('change', async () => {

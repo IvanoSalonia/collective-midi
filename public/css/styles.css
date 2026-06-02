@@ -482,6 +482,31 @@ body.conductor {
   accent-color: #58a6ff;
 }
 
+/* Preset export/import in the FX bus panel. */
+.sd-preset {
+  margin-top: 0.6rem;
+  padding-top: 0.6rem;
+  border-top: 1px dashed #1a1a1a;
+}
+.sd-preset-buttons {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.3rem;
+}
+.sd-preset-btn {
+  flex: 1;
+  background: #1a1a1a;
+  color: #ddd;
+  border: 1px solid #2a2a2a;
+  border-radius: 4px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+.sd-preset-btn:hover { background: #222; border-color: #3a3a3a; }
+.sd-preset-btn:active { background: #2a2a2a; }
+
 .sd-drop {
   border: 1px dashed #333;
   border-radius: 6px;

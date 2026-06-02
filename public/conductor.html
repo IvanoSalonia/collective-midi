@@ -218,6 +218,18 @@
       </label>
       <label class="sd-row">Delay feedback <input type="range" id="delay-feedback" min="0" max="0.9" step="0.01" /></label>
       <label class="sd-row">Reverb wet     <input type="range" id="reverb-wet"     min="0" max="1"   step="0.01" /></label>
+
+      <!-- Preset save/load. Server settings reset to defaults on every Node
+           process restart (incl. Railway redeploys), so use Export to keep a
+           snapshot of a tuned config and Import to restore it. -->
+      <div class="sd-preset">
+        <div class="sd-section-label">Preset</div>
+        <div class="sd-preset-buttons">
+          <button id="preset-export" class="sd-preset-btn" title="Download current settings as JSON">Export</button>
+          <button id="preset-import" class="sd-preset-btn" title="Load settings from a JSON file">Import</button>
+        </div>
+        <input type="file" id="preset-import-file" accept="application/json,.json" hidden />
+      </div>
     </div>
   </section>
 
