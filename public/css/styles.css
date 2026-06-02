@@ -174,16 +174,42 @@ body.audience {
 .start-inner {
   text-align: center;
   color: #ddd;
+  padding: 0 1.5rem;
+  width: 100%;
+  max-width: 420px;
 }
 .start-title {
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: 0.02em;
+  color: #ccc;
 }
-.start-sub {
-  margin-top: 0.5rem;
-  font-size: 1rem;
-  color: #888;
+.start-groups {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+  margin-top: 1.6rem;
+}
+.start-group {
+  background: var(--c);
+  border: none;
+  border-radius: 18px;
+  font-size: 3.2rem;
+  font-weight: 700;
+  font-family: inherit;
+  aspect-ratio: 1 / 1;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.08s ease, filter 0.08s ease;
+  /* color is set inline per-button for contrast against the channel color */
+}
+.start-group:active {
+  transform: scale(0.95);
+  filter: brightness(1.15);
 }
 
 /* --- Conductor (laptop) --- */

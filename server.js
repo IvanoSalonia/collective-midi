@@ -129,7 +129,7 @@ function mergeSettings(target, patch) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('hello', ({ role }) => {
+  socket.on('hello', ({ role, group: requestedGroup }) => {
     if (role === 'conductor') {
       if (conductorId && conductorId !== socket.id) {
         io.to(conductorId).emit('replaced');
@@ -144,9 +144,17 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Audience.
-    const group = nextGroupCursor % GROUP_COUNT;
-    nextGroupCursor++;
+    // Audience. The phone picks a group on the start overlay and sends it
+    // in `hello`. If it's missing or invalid we fall back to round-robin
+    // (safety net for non-UI clients or bugs).
+    let group;
+    if (Number.isInteger(requestedGroup) &&
+        requestedGroup >= 0 && requestedGroup < GROUP_COUNT) {
+      group = requestedGroup;
+    } else {
+      group = nextGroupCursor % GROUP_COUNT;
+      nextGroupCursor++;
+    }
     audience.set(socket.id, { group });
     socket.join(`group:${group}`);
     socket.emit('assigned', {

@@ -93,14 +93,13 @@ const gammaReadoutEl = document.getElementById('gamma-readout');
 
 // --- Socket wiring -------------------------------------------------------
 
-socket.on('connect', () => socket.emit('hello', { role: 'audience' }));
+// We no longer auto-emit hello on connect — the audience picks a group on
+// the start overlay, and hello is sent with that explicit group choice.
 
 socket.on('assigned', ({ group, color, settings }) => {
   myGroup = group;
   pendingSettings = settings;
   document.documentElement.style.setProperty('--group-color', color);
-  const sub = document.getElementById('start-sub');
-  if (sub) sub.textContent = `Group ${group + 1}`;
   if (groupBadgeEl) groupBadgeEl.textContent = `Group ${group + 1}`;
 });
 
@@ -147,11 +146,22 @@ function applyIncomingSettings(settings) {
 
 // --- Start tap: unlock audio, request permissions, go fullscreen --------
 
+// User picks a group on the start overlay. The chosen button's tap is the
+// user gesture that lets us unlock AudioContext and request sensor perms.
+// We use a once-flag instead of {once:true} per button so a fast second tap
+// on a different button can't double-init the audio stack.
 const overlay = document.getElementById('start-overlay');
-overlay.addEventListener('click', async () => {
-  await startEverything();
-  overlay.classList.add('hidden');
-}, { once: true });
+let started = false;
+document.querySelectorAll('.start-group').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    if (started) return;
+    started = true;
+    const chosenGroup = Number(btn.dataset.group);
+    socket.emit('hello', { role: 'audience', group: chosenGroup });
+    await startEverything();
+    overlay.classList.add('hidden');
+  });
+});
 
 async function startEverything() {
   // CRITICAL: request sensor permission FIRST, before any other await.

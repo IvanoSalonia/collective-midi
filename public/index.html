@@ -15,12 +15,20 @@
   <link rel="manifest" href="/manifest.webmanifest" />
 </head>
 <body class="audience">
-  <!-- Tap-to-start overlay. iOS requires a user gesture for AudioContext
-       and DeviceOrientation permission; we fold both into one tap. -->
+  <!-- Group picker. iOS requires a user gesture for AudioContext and
+       DeviceOrientation permission; the tap on one of these buttons serves
+       as that gesture AND tells the server which group to join. Colors are
+       hardcoded to the default (state A) per-channel palette — server is
+       still authoritative and overrides via 'assigned'. -->
   <div id="start-overlay">
     <div class="start-inner">
-      <div class="start-title">Tap to join</div>
-      <div class="start-sub" id="start-sub">Sound + tilt</div>
+      <div class="start-title">Pick a group</div>
+      <div class="start-groups">
+        <button class="start-group" type="button" data-group="0" style="--c:#42EA33; color:#000">1</button>
+        <button class="start-group" type="button" data-group="1" style="--c:#DD1414; color:#fff">2</button>
+        <button class="start-group" type="button" data-group="2" style="--c:#FFFFFF; color:#000">3</button>
+        <button class="start-group" type="button" data-group="3" style="--c:#1417DD; color:#fff">4</button>
+      </div>
     </div>
   </div>
 
