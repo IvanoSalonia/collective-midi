@@ -596,25 +596,49 @@ body.conductor {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-/* Exactly 5 rows tall. Each entry is one line, ellipsised if too long.
-   When more than MAX_LOG entries arrive, JS prunes the oldest. */
+/* 10-column grid: newest entries on the left (CSS prepend). Each cell is
+   a small tile with the note name in white and "group N" in the group's
+   color. When MAX_LOG is exceeded the oldest (rightmost) cell falls off. */
 .log {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.8rem;
-  line-height: 1.5;
-  color: #aaa;
   background: #0a0a0a;
   border: 1px solid #1a1a1a;
   border-radius: 6px;
-  padding: 0.4rem 0.7rem;
-  height: calc(5 * 1.5em + 0.8rem);
+  padding: 0.4rem;
+  display: grid;
+  grid-template-columns: repeat(10, 1fr);
+  gap: 0.35rem;
+  height: 4.6rem;
+}
+.log-entry {
+  background: #111;
+  border: 1px solid #1a1a1a;
+  border-radius: 4px;
+  padding: 0.15rem 0.2rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   overflow: hidden;
 }
-.log div {
-  height: 1.5em;
-  line-height: 1.5em;
+.log-entry.log-note .log-note-name {
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1.15;
+}
+.log-entry.log-note .log-note-group {
+  font-size: 0.58rem;
+  line-height: 1.2;
+  margin-top: 0.1rem;
+  letter-spacing: 0.02em;
+}
+.log-entry.log-text {
+  color: #888;
+  font-size: 0.6rem;
+  line-height: 1.2;
   white-space: nowrap;
-  overflow: hidden;
   text-overflow: ellipsis;
 }
 

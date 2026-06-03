@@ -125,7 +125,7 @@ socket.on('roster', applyRoster);
 
 socket.on('note-echo', ({ note, group, kind }) => {
   setGroupActive(group, kind === 'on');
-  if (kind === 'on') appendLog(`${noteName(note)} → group ${group + 1}`);
+  if (kind === 'on') appendNoteLog(note, group);
 });
 
 function applyRoster({ total, perGroup }) {
@@ -175,11 +175,37 @@ function setChannelActive(ch, on) {
   else cell.classList.remove('active');
 }
 
-const MAX_LOG = 5;
+// Up to 10 entries, one per column in the log grid.
+const MAX_LOG = 10;
+
+// Plain status entries (errors, MIDI messages, rehearsal toggle, etc.).
+// One cell, monospace, single-line ellipsised.
 function appendLog(text) {
-  const line = document.createElement('div');
-  line.textContent = text;
-  logEl.prepend(line);
+  const entry = document.createElement('div');
+  entry.className = 'log-entry log-text';
+  entry.textContent = text;
+  logEl.prepend(entry);
+  pruneLog();
+}
+
+// Note entries: note name in white, "group N" in the group's color.
+function appendNoteLog(note, group) {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry log-note';
+  const n = document.createElement('div');
+  n.className = 'log-note-name';
+  n.textContent = noteName(note);
+  const g = document.createElement('div');
+  g.className = 'log-note-group';
+  g.style.color = groupColors[group] || '#aaa';
+  g.textContent = `group ${group + 1}`;
+  entry.appendChild(n);
+  entry.appendChild(g);
+  logEl.prepend(entry);
+  pruneLog();
+}
+
+function pruneLog() {
   while (logEl.childElementCount > MAX_LOG) logEl.lastChild.remove();
 }
 
