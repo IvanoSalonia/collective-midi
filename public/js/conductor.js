@@ -13,7 +13,6 @@
 // 6. Step sequencer (in sequencer.js) shares the same socket + local stack.
 
 import { createAudioStack } from '/js/audio/audio-stack.js';
-import { createSequencer } from '/js/sequencer.js';
 
 const socket = io();
 
@@ -176,13 +175,7 @@ function setChannelActive(ch, on) {
   else cell.classList.remove('active');
 }
 
-// Backward-compatible brief-pulse helper used by the sequencer.
-function flashChannel(ch) {
-  setChannelActive(ch, true);
-  setTimeout(() => setChannelActive(ch, false), 140);
-}
-
-const MAX_LOG = 40;
+const MAX_LOG = 5;
 function appendLog(text) {
   const line = document.createElement('div');
   line.textContent = text;
@@ -482,16 +475,3 @@ function onMidiMessage(e) {
 }
 
 initMidi();
-
-// --- Step sequencer -------------------------------------------------------
-// Lives on the conductor page, shares the same note-on/off socket path and
-// the same local rehearsal stack as live MIDI input.
-createSequencer({
-  socket,
-  getBpm: () => currentSettings?.bpm ?? 120,
-  getLocalStack: () => localStack,
-  isRehearsalOn,
-  ensureLocalStack,
-  flashChannel,
-  appendLog
-});

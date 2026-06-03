@@ -212,11 +212,33 @@ body.audience {
   filter: brightness(1.15);
 }
 
-/* --- Conductor (laptop) --- */
+/* --- Conductor (laptop) ---
+   The conductor sits in a centered "card" at 50vw × 60vh on wide screens,
+   surrounded by big margins (25vw sides, 20vh top/bottom). Sections inside
+   are laid out vertically; the sound-design panel takes whatever vertical
+   space is left and scrolls internally. The live-notes log is pinned at
+   the bottom at a fixed 5-row height. On narrower screens the card fills
+   the viewport. */
+html { background: #000; min-height: 100vh; }
 body.conductor {
-  min-height: 100dvh;
+  width: 50vw;
+  height: 60vh;
+  margin: 20vh auto;
   display: flex;
   flex-direction: column;
+  background: #050505;
+  border: 1px solid #1a1a1a;
+  border-radius: 14px;
+  overflow: hidden;
+}
+@media (max-width: 1100px) {
+  body.conductor {
+    width: 100vw;
+    height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    border: none;
+  }
 }
 
 .bar {
@@ -367,6 +389,9 @@ body.conductor {
   grid-template-columns: 1fr 220px;
   gap: 0.75rem;
   padding: 0 1rem 1rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 @media (max-width: 1100px) {
   .sd-panel { grid-template-columns: 1fr; }
@@ -558,33 +583,40 @@ body.conductor {
 }
 
 .log-wrap {
-  padding: 0.5rem 1rem 1.5rem;
-  flex: 1;
+  padding: 0.5rem 1rem 1rem;
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  min-height: 0;
 }
 .log-wrap h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.78rem;
   font-weight: 500;
   color: #888;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
+/* Exactly 5 rows tall. Each entry is one line, ellipsised if too long.
+   When more than MAX_LOG entries arrive, JS prunes the oldest. */
 .log {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
   color: #aaa;
   background: #0a0a0a;
   border: 1px solid #1a1a1a;
   border-radius: 6px;
-  padding: 0.5rem 0.75rem;
-  overflow-y: auto;
-  flex: 1;
-  min-height: 120px;
+  padding: 0.4rem 0.7rem;
+  height: calc(5 * 1.5em + 0.8rem);
+  overflow: hidden;
 }
-.log div { padding: 0.1rem 0; }
+.log div {
+  height: 1.5em;
+  line-height: 1.5em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* --- Step sequencer --- */
 .seq-panel {
