@@ -596,51 +596,27 @@ body.conductor {
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-/* 10-column grid: newest entries on the left (CSS prepend). Each cell is
-   a small tile with the note name in white and "group N" in the group's
-   color. When MAX_LOG is exceeded the oldest (rightmost) cell falls off. */
+/* Multi-column text log. Newest entries prepend to the top of column 1 and
+   flow down then across; older entries shift right and eventually clip. */
 .log {
   background: #0a0a0a;
   border: 1px solid #1a1a1a;
   border-radius: 6px;
-  padding: 0.4rem;
-  display: grid;
-  grid-template-columns: repeat(10, 1fr);
-  gap: 0.35rem;
-  height: 4.6rem;
+  padding: 0.5rem 0.7rem;
+  column-count: 10;
+  column-gap: 0.9rem;
+  height: 6.5rem;
+  overflow: hidden;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: #aaa;
 }
 .log-entry {
-  background: #111;
-  border: 1px solid #1a1a1a;
-  border-radius: 4px;
-  padding: 0.15rem 0.2rem;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  text-align: center;
-  overflow: hidden;
-}
-.log-entry.log-note .log-note-name {
-  color: #fff;
-  font-weight: 600;
-  font-size: 0.9rem;
-  line-height: 1.15;
-}
-.log-entry.log-note .log-note-group {
-  font-size: 0.58rem;
-  line-height: 1.2;
-  margin-top: 0.1rem;
-  letter-spacing: 0.02em;
-}
-.log-entry.log-text {
-  color: #888;
-  font-size: 0.6rem;
-  line-height: 1.2;
   white-space: nowrap;
-  text-overflow: ellipsis;
+  break-inside: avoid;
 }
+.log-entry.log-text { color: #777; }
 
 /* --- Step sequencer --- */
 .seq-panel {

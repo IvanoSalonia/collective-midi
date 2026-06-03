@@ -175,11 +175,10 @@ function setChannelActive(ch, on) {
   else cell.classList.remove('active');
 }
 
-// Up to 10 entries, one per column in the log grid.
-const MAX_LOG = 10;
+// Plain text log entries flow top-to-bottom through CSS columns. MAX_LOG
+// is generous so the visible columns stay full; overflow is hidden by CSS.
+const MAX_LOG = 60;
 
-// Plain status entries (errors, MIDI messages, rehearsal toggle, etc.).
-// One cell, monospace, single-line ellipsised.
 function appendLog(text) {
   const entry = document.createElement('div');
   entry.className = 'log-entry log-text';
@@ -188,18 +187,15 @@ function appendLog(text) {
   pruneLog();
 }
 
-// Note entries: note name in white, "group N" in the group's color.
+// Note entries: "<note> → group N" as plain text, with the "group N" part
+// colored by the channel/group.
 function appendNoteLog(note, group) {
   const entry = document.createElement('div');
-  entry.className = 'log-entry log-note';
-  const n = document.createElement('div');
-  n.className = 'log-note-name';
-  n.textContent = noteName(note);
-  const g = document.createElement('div');
-  g.className = 'log-note-group';
+  entry.className = 'log-entry';
+  entry.appendChild(document.createTextNode(`${noteName(note)} → `));
+  const g = document.createElement('span');
   g.style.color = groupColors[group] || '#aaa';
   g.textContent = `group ${group + 1}`;
-  entry.appendChild(n);
   entry.appendChild(g);
   logEl.prepend(entry);
   pruneLog();
