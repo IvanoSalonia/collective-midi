@@ -1,26 +1,22 @@
 // Server-side defaults for sound-design settings.
 //
-// Each channel has THREE states (A, B, C) that correspond to phone
-// orientations:
-//   A = portrait (default)
-//   B = landscape right
-//   C = landscape left
+// These are the values the server uses on every fresh start (and what every
+// audience client receives on join, until the conductor pushes updates).
+// Baked from the 2026-06-02 conductor preset; tweak by exporting a new
+// preset and copying its values here, or just by editing in place.
 //
-// The audience phone interpolates between these states continuously as the
-// device tilts, producing a smooth crossfade of color AND every sound
-// design parameter. The values below are the spec's percentages converted
-// to engine-native units via each slider's min/max range.
-//
-// Channels are indexed 0..3 (matching MIDI channel 0..3 / Keystep ch1..4).
+// Each channel has THREE orientation states (A/B/C) — the audience phone
+// blends between them as it tilts. Channel index 0..3 maps to MIDI ch 1..4
+// / Keystep ch1..4.
 
 const DEFAULT_SETTINGS = {
-  bpm: 120,
+  bpm: 50,
   delay: {
-    step: '1/8',          // '1/4' | '1/8' | '1/8d' | '1/16'
-    feedback: 0.4         // 0..0.9
+    step: '1/8',           // '1/4' | '1/8' | '1/8d' | '1/16'
+    feedback: 0.4
   },
   reverb: {
-    wet: 0.9              // 0..1
+    wet: 0.9
   },
   channels: [
     // -----------------------------------------------------------------
@@ -29,135 +25,75 @@ const DEFAULT_SETTINGS = {
     {
       A: {
         color: '#42EA33',
-        volume: 1.0,
-        osc: 'sine',
-        detune: 7.5,      // cents (slider 0..50, 15%)
-        cutoff: 3644,     // Hz   (slider 80..8000, 45%)
-        lfoRate: 7.07,    // Hz   (slider 0.1..20, 35%)
-        lfoDepth: 0.55,   //      (0..1, 55%)
-        attack: 0.10,     // s    (slider 0.001..2, 5%)
-        decay: 1.06,      // s    (slider 0.01..3, 35%)
-        sustain: 0.5,     //      (0..1, 50%)
-        release: 1.21,    // s    (slider 0.01..3, 40%)
-        reverbSend: 0.40,
-        delaySend: 0.25
+        volume: 1.0, osc: 'sine', detune: 0, cutoff: 3612,
+        lfoRate: 0.1, lfoDepth: 0,
+        attack: 0.001, decay: 0.38, sustain: 0.17, release: 0.88,
+        reverbSend: 0.16, delaySend: 0.0
       },
       B: {
         color: '#02C9DF',
-        volume: 1.0,
-        osc: 'sine',
-        detune: 0,
-        cutoff: 5624,     // 70%
-        lfoRate: 4.08,    // 20%
-        lfoDepth: 0.65,
-        attack: 0.10,
-        decay: 0.91,      // 30%
-        sustain: 0.45,
-        release: 0.61,    // 20%
-        reverbSend: 0.55,
-        delaySend: 0.10
+        volume: 1.0, osc: 'sine', detune: 0, cutoff: 5624,
+        lfoRate: 4.08, lfoDepth: 0.65,
+        attack: 0.1, decay: 0.91, sustain: 0.45, release: 0.61,
+        reverbSend: 0.55, delaySend: 0.10
       },
       C: {
         color: '#0739FF',
-        volume: 1.0,
-        osc: 'sine',
-        detune: 20,       // 40%
-        cutoff: 2456,     // 30%
-        lfoRate: 12.04,   // 60%
-        lfoDepth: 0.15,
-        attack: 0.10,
-        decay: 1.21,      // 40%
-        sustain: 0.55,
-        release: 1.36,    // 45%
-        reverbSend: 0.30,
-        delaySend: 0.10
+        volume: 1.0, osc: 'sine', detune: 0, cutoff: 6798,
+        lfoRate: 12.04, lfoDepth: 0.15,
+        attack: 0.001, decay: 0.09, sustain: 0.01, release: 0.09,
+        reverbSend: 0.30, delaySend: 0.79
       }
     },
 
     // -----------------------------------------------------------------
-    // CH2 — sampler
+    // CH2 — sampler (low-pass filtered)
     // -----------------------------------------------------------------
     {
       A: {
         color: '#DD1414',
-        volume: 0.72,
-        cutoff: 3000,     // Hz, low-pass (replaces transpose)
-        attack: 0.08,     // 4%
-        decay: 0.97,      // 32%
-        sustain: 0.58,
-        release: 0.55,    // 18%
-        reverbSend: 0.08,
-        delaySend: 0.06
+        volume: 1.0, cutoff: 505,
+        attack: 0.012, decay: 0.39, sustain: 0.22, release: 0.83,
+        reverbSend: 0.08, delaySend: 0.06
       },
       B: {
         color: '#FF8307',
-        volume: 0.95,
-        cutoff: 6500,     // brighter
-        attack: 0.08,
-        decay: 1.42,      // 47%
-        sustain: 0.68,
-        release: 2.64,    // 88%
-        reverbSend: 0.12,
-        delaySend: 0.08
+        volume: 0.95, cutoff: 2690,
+        attack: 0.012, decay: 1.42, sustain: 0.68, release: 2.64,
+        reverbSend: 0.58, delaySend: 0.08
       },
       C: {
         color: '#FF07B5',
-        volume: 0.88,
-        cutoff: 1200,     // darker
-        attack: 0.08,
-        decay: 0.85,      // 28%
-        sustain: 0.52,
-        release: 0.37,    // 12%
-        reverbSend: 0.72,
-        delaySend: 0.08
+        volume: 0.99, cutoff: 7660,
+        attack: 0.001, decay: 0.23, sustain: 0.07, release: 0.35,
+        reverbSend: 0.00, delaySend: 0.64
       }
     },
 
     // -----------------------------------------------------------------
-    // CH3 — 2-op FM synth (Volca FM character)
+    // CH3 — 2-op FM synth
     // -----------------------------------------------------------------
     {
       A: {
         color: '#FFFFFF',
-        volume: 1.0,
-        ratio: 10,        // (0.25..16, 62%)
-        modIndex: 1.8,    // (0..10, 18%)
-        lfoRate: 7.07,    // (0.1..20, 35%)
-        lfoDepth: 2.04,   // (0..3, 68%)
-        attack: 0.10,
-        decay: 1.56,      // 52%
-        sustain: 0.42,
-        release: 1.15,    // 38%
-        reverbSend: 0.35,
-        delaySend: 0.08
+        volume: 0.95, ratio: 13.5, modIndex: 1.8,
+        lfoRate: 6.6, lfoDepth: 0.55,
+        attack: 0.001, decay: 0.58, sustain: 0.22, release: 0.89,
+        reverbSend: 0.00, delaySend: 0.00
       },
       B: {
         color: '#A57EE8',
-        volume: 1.0,
-        ratio: 11.6,      // 72%
-        modIndex: 5.8,    // 58%
-        lfoRate: 4.48,    // 22%
-        lfoDepth: 2.94,   // 98%
-        attack: 0.10,
-        decay: 1.65,      // 55%
-        sustain: 0.45,
-        release: 0.97,    // 32%
-        reverbSend: 0.28,
-        delaySend: 0.35
+        volume: 0.62, ratio: 11.6, modIndex: 2,
+        lfoRate: 4.2, lfoDepth: 0.35,
+        attack: 0.036, decay: 1.65, sustain: 0.45, release: 0.97,
+        reverbSend: 0.28, delaySend: 0.35
       },
       C: {
         color: '#619CD3',
-        volume: 1.0,
-        ratio: 6.25,      // 38%
-        modIndex: 2.8,    // 28%
-        lfoRate: 13.63,   // 68%
-        lfoDepth: 0.36,   // 12%
-        attack: 0.10,
-        decay: 1.27,      // 42%
-        sustain: 0.38,
-        release: 1.27,    // 42%
-        reverbSend: 0.42,
-        delaySend: 0.22
+        volume: 1.0, ratio: 4.75, modIndex: 2.8,
+        lfoRate: 1.4, lfoDepth: 0.36,
+        attack: 0.001, decay: 0.17, sustain: 0.01, release: 0.48,
+        reverbSend: 0.42, delaySend: 0.71
       }
     },
 
@@ -167,37 +103,25 @@ const DEFAULT_SETTINGS = {
     {
       A: {
         color: '#1417DD',
-        volume: 0.72,
-        startPoint: 0.28,
-        sliceCount: 16,   // (4..72, 18%)
-        loop: false,
-        reverbSend: 0.68,
-        delaySend: 0.35
+        volume: 0.57, startPoint: 0.09, sliceCount: 36, loop: true,
+        reverbSend: 0.03, delaySend: 0.35
       },
       B: {
         color: '#4DDE9F',
-        volume: 0.95,
-        startPoint: 0.18,
-        sliceCount: 30,   // (38%)
-        loop: true,
-        reverbSend: 0.42,
-        delaySend: 0.08
+        volume: 0.58, startPoint: 0.00, sliceCount: 30, loop: true,
+        reverbSend: 0.42, delaySend: 0.08
       },
       C: {
         color: '#D178F4',
-        volume: 0.88,
-        startPoint: 0.42,
-        sliceCount: 16,
-        loop: false,
-        reverbSend: 0.68,
-        delaySend: 0.35
+        volume: 0.95, startPoint: 0.61, sliceCount: 10, loop: false,
+        reverbSend: 0.00, delaySend: 0.79
       }
     }
   ],
   samples: {
     // Updated by the upload endpoint when the conductor drops a new file.
     ch2: '/samples/sampler.mp3',
-    ch4: '/samples/ch2-instrument.mp3'
+    ch4: '/samples/slicer.mp3'
   }
 };
 
