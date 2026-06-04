@@ -171,6 +171,14 @@ body.audience {
   opacity: 0;
   pointer-events: none;
 }
+/* Each step fills the overlay; only one is visible at a time. */
+.start-step {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.start-step.hidden { display: none; }
 .start-inner {
   text-align: center;
   color: #ddd;
@@ -183,6 +191,34 @@ body.audience {
   font-weight: 600;
   letter-spacing: 0.02em;
   color: #ccc;
+}
+.start-sub {
+  margin-top: 0.5rem;
+  font-size: 0.95rem;
+  color: #888;
+}
+.start-begin {
+  margin-top: 1.8rem;
+  width: 100%;
+  padding: 1.1rem 1rem;
+  background: #1d1d1d;
+  color: #eee;
+  border: 1px solid #333;
+  border-radius: 16px;
+  font-size: 1.15rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.08s ease, filter 0.08s ease, opacity 0.2s ease;
+}
+.start-begin:active { transform: scale(0.97); filter: brightness(1.3); }
+.start-begin:disabled { opacity: 0.6; cursor: default; }
+.start-status {
+  margin-top: 1.4rem;
+  min-height: 1.2em;
+  font-size: 0.95rem;
 }
 .start-groups {
   display: grid;
@@ -210,6 +246,15 @@ body.audience {
 .start-group:active {
   transform: scale(0.95);
   filter: brightness(1.15);
+}
+/* Once a group is chosen, dim the others and highlight the pick so the
+   audience gets immediate confirmation and doesn't tap a second time. */
+.start-group:disabled { cursor: default; }
+.start-group:disabled:not(.selected) { opacity: 0.4; }
+.start-group.selected {
+  outline: 3px solid #fff;
+  outline-offset: 3px;
+  filter: brightness(1.1);
 }
 
 /* --- Conductor (laptop) ---

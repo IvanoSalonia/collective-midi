@@ -15,19 +15,35 @@
   <link rel="manifest" href="/manifest.webmanifest" />
 </head>
 <body class="audience">
-  <!-- Group picker. iOS requires a user gesture for AudioContext and
-       DeviceOrientation permission; the tap on one of these buttons serves
-       as that gesture AND tells the server which group to join. Colors are
-       hardcoded to the default (state A) per-channel palette — server is
-       still authoritative and overrides via 'assigned'. -->
+  <!-- Two-step start overlay.
+       iOS requires a user gesture to unlock AudioContext and to prompt for
+       DeviceOrientation/DeviceMotion permission. We keep that gesture as its
+       OWN step ("Tap to start") so the native "Allow" dialog has nothing
+       behind it to re-tap. Only once permission is resolved do we reveal the
+       group picker, so the audience picks a group exactly once.
+       Colors are the default (state A) per-channel palette — the server is
+       authoritative and overrides via 'assigned'. -->
   <div id="start-overlay">
-    <div class="start-inner">
-      <div class="start-title">Pick a group</div>
-      <div class="start-groups">
-        <button class="start-group" type="button" data-group="0" style="--c:#42EA33; color:#000">1</button>
-        <button class="start-group" type="button" data-group="1" style="--c:#DD1414; color:#fff">2</button>
-        <button class="start-group" type="button" data-group="2" style="--c:#FFFFFF; color:#000">3</button>
-        <button class="start-group" type="button" data-group="3" style="--c:#1417DD; color:#fff">4</button>
+    <!-- Step 1: the gesture (unlock audio + request motion permission). -->
+    <div class="start-step" id="start-step-begin">
+      <div class="start-inner">
+        <div class="start-title">Collective MIDI</div>
+        <div class="start-sub">Tap to enable motion &amp; sound</div>
+        <button class="start-begin" id="start-begin" type="button">Tap to start</button>
+      </div>
+    </div>
+
+    <!-- Step 2: pick a group (revealed only after permission is resolved). -->
+    <div class="start-step hidden" id="start-step-group">
+      <div class="start-inner">
+        <div class="start-title">Pick your group</div>
+        <div class="start-groups">
+          <button class="start-group" type="button" data-group="0" style="--c:#42EA33; color:#000">1</button>
+          <button class="start-group" type="button" data-group="1" style="--c:#DD1414; color:#fff">2</button>
+          <button class="start-group" type="button" data-group="2" style="--c:#FFFFFF; color:#000">3</button>
+          <button class="start-group" type="button" data-group="3" style="--c:#1417DD; color:#fff">4</button>
+        </div>
+        <div class="start-status muted" id="start-status"></div>
       </div>
     </div>
   </div>

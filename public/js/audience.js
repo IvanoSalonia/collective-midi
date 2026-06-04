@@ -144,32 +144,45 @@ function applyIncomingSettings(settings) {
   }
 }
 
-// --- Start tap: unlock audio, request permissions, go fullscreen --------
+// --- Two-step start: (1) enable sensors+audio, (2) pick a group ----------
+//
+// These were previously a single tap on a group button. That meant the iOS
+// "Allow Motion & Orientation" dialog popped up over the still-visible group
+// picker, and because the picker is only hidden after the whole async init
+// finishes, the user saw "pick a group" again after tapping Allow and tapped
+// a second time. Splitting the gesture (step 1) from the group choice (step
+// 2) makes the picker appear only after permission is resolved, so the
+// audience picks a group exactly once.
 
-// User picks a group on the start overlay. The chosen button's tap is the
-// user gesture that lets us unlock AudioContext and request sensor perms.
-// We use a once-flag instead of {once:true} per button so a fast second tap
-// on a different button can't double-init the audio stack.
 const overlay = document.getElementById('start-overlay');
-let started = false;
-document.querySelectorAll('.start-group').forEach((btn) => {
-  btn.addEventListener('click', async () => {
-    if (started) return;
-    started = true;
-    const chosenGroup = Number(btn.dataset.group);
-    socket.emit('hello', { role: 'audience', group: chosenGroup });
-    await startEverything();
-    overlay.classList.add('hidden');
-  });
+const beginStepEl = document.getElementById('start-step-begin');
+const groupStepEl = document.getElementById('start-step-group');
+const beginBtn = document.getElementById('start-begin');
+const startStatusEl = document.getElementById('start-status');
+
+let begun = false;    // step 1 complete: permission requested + audio unlocked
+let joining = false;  // step 2 in progress: guards against double group taps
+
+// Step 1 — the user gesture. Unlock audio + request sensor permission, then
+// reveal the group picker.
+beginBtn?.addEventListener('click', async () => {
+  if (begun) return;
+  begun = true;
+  beginBtn.disabled = true;
+  beginBtn.textContent = 'Starting…';
+  await beginSession();
+  // Reveal step 2 (group picker) now that the Allow dialog is resolved.
+  beginStepEl.classList.add('hidden');
+  groupStepEl.classList.remove('hidden');
 });
 
-async function startEverything() {
+async function beginSession() {
   // CRITICAL: request sensor permission FIRST, before any other await.
   // iOS only honors DeviceOrientation/DeviceMotion requestPermission() while
-  // the tap's transient activation is live. Awaiting fullscreen / audio /
-  // settings beforehand spends that activation, so requestPermission() then
-  // rejects with no prompt and the listeners never attach — which is exactly
-  // what froze gamma at its default. Doing it first keeps the gesture valid.
+  // the tap's transient activation is live. Awaiting fullscreen / audio
+  // beforehand spends that activation, so requestPermission() then rejects
+  // with no prompt and the listeners never attach — which froze gamma at its
+  // default. Doing it first keeps the gesture valid.
   await requestSensorPermissions();
 
   // Fullscreen — works on Android/iPad/desktop. iPhone Safari throws (no
@@ -180,8 +193,34 @@ async function startEverything() {
     else if (root.webkitRequestFullscreen) root.webkitRequestFullscreen();
   } catch { /* iPhone Safari etc. */ }
 
+  // Unlock the AudioContext within this same gesture. The later group tap is
+  // also a gesture, so a resume guard there covers iOS re-suspending it.
   audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   if (audioCtx.state === 'suspended') await audioCtx.resume();
+}
+
+// Step 2 — pick a group exactly once. Buttons disable on first tap and show
+// "Joining…" so a slow 'assigned'/settings round-trip can't tempt a re-tap.
+document.querySelectorAll('.start-group').forEach((btn) => {
+  btn.addEventListener('click', async () => {
+    if (joining) return;
+    joining = true;
+    const chosenGroup = Number(btn.dataset.group);
+    document.querySelectorAll('.start-group').forEach((b) => {
+      b.disabled = true;
+      b.classList.toggle('selected', b === btn);
+    });
+    if (startStatusEl) startStatusEl.textContent = 'Joining…';
+    socket.emit('hello', { role: 'audience', group: chosenGroup });
+    await joinGroup();
+    overlay.classList.add('hidden');
+  });
+});
+
+async function joinGroup() {
+  // Audio was unlocked in step 1; resume again in case iOS suspended it
+  // during the gap (harmless if already running).
+  if (audioCtx?.state === 'suspended') await audioCtx.resume();
 
   const settings = pendingSettings || await waitForSettings();
   stack = createAudioStack(audioCtx, settings);
