@@ -221,9 +221,9 @@ body.audience {
    the viewport. */
 html { background: #000; min-height: 100vh; }
 body.conductor {
-  width: 50vw;
-  height: 60vh;
-  margin: 20vh auto;
+  width: 62.5vw;
+  height: 70vh;
+  margin: 15vh auto;
   display: flex;
   flex-direction: column;
   background: #050505;
